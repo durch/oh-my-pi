@@ -2,7 +2,9 @@ import { afterEach, beforeEach, describe, expect, it } from "bun:test";
 import * as fs from "node:fs";
 import * as os from "node:os";
 import * as path from "node:path";
+import { Effort } from "@oh-my-pi/pi-ai";
 import { _resetSettingsForTest, Settings } from "@oh-my-pi/pi-coding-agent/config/settings";
+import { getPathsForTab, getUi } from "@oh-my-pi/pi-coding-agent/config/settings-schema";
 import { getProjectAgentDir, Snowflake } from "@oh-my-pi/pi-utils";
 import { YAML } from "bun";
 
@@ -69,12 +71,12 @@ describe("Settings", () => {
 			});
 
 			// Settings saves a change - should merge, not overwrite
-			settings.set("defaultThinkingLevel", "high");
+			settings.set("defaultThinkingLevel", Effort.High);
 			await settings.flush();
 
 			const savedSettings = await readSettings();
 			expect(savedSettings.enabledModels).toEqual(["claude-opus-4-5", "gpt-5.2-codex"]);
-			expect(savedSettings.defaultThinkingLevel).toBe("high");
+			expect(savedSettings.defaultThinkingLevel).toBe(Effort.High);
 			expect(savedSettings.theme).toEqual({ dark: "anthracite" });
 			expect((savedSettings.modelRoles as { default?: string } | undefined)?.default).toBe("claude-sonnet");
 		});
@@ -110,14 +112,39 @@ describe("Settings", () => {
 
 			await writeSettings({
 				theme: { dark: "anthracite" },
-				defaultThinkingLevel: "low",
+				defaultThinkingLevel: Effort.Low,
 			});
 
-			settings.set("defaultThinkingLevel", "high");
+			settings.set("defaultThinkingLevel", Effort.High);
 			await settings.flush();
 
 			const savedSettings = await readSettings();
-			expect(savedSettings.defaultThinkingLevel).toBe("high");
+			expect(savedSettings.defaultThinkingLevel).toBe(Effort.High);
+		});
+	});
+	describe("compaction remote setting", () => {
+		it("includes remote compaction in the agent settings UI", () => {
+			expect(getPathsForTab("agent")).toContain("compaction.remoteEnabled");
+			expect(getUi("compaction.remoteEnabled")).toMatchObject({
+				tab: "agent",
+				label: "Remote compaction",
+			});
+		});
+
+		it("persists the remote compaction toggle", async () => {
+			const settings = await Settings.init({ cwd: projectDir, agentDir });
+
+			expect(settings.get("compaction.remoteEnabled")).toBe(true);
+
+			settings.set("compaction.remoteEnabled", false);
+			await settings.flush();
+
+			const savedSettings = await readSettings();
+			expect(savedSettings.compaction).toEqual({ remoteEnabled: false });
+
+			_resetSettingsForTest();
+			const reloaded = await Settings.init({ cwd: projectDir, agentDir });
+			expect(reloaded.get("compaction.remoteEnabled")).toBe(false);
 		});
 	});
 });

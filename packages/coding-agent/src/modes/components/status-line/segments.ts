@@ -1,8 +1,10 @@
 import * as os from "node:os";
+import { ThinkingLevel } from "@oh-my-pi/pi-agent-core";
 import { TERMINAL } from "@oh-my-pi/pi-tui";
 import { formatDuration, formatNumber, getProjectDir } from "@oh-my-pi/pi-utils";
 import { theme } from "../../../modes/theme/theme";
 import { shortenPath } from "../../../tools/render-utils";
+import { getContextUsageLevel, getContextUsageThemeColor } from "./context-thresholds";
 import type { RenderedSegment, SegmentContext, StatusLineSegment, StatusLineSegmentId } from "./types";
 
 export type { SegmentContext } from "./types";
@@ -44,10 +46,14 @@ const modelSegment: StatusLineSegment = {
 
 		let content = withIcon(theme.icon.model, modelName);
 
+		if (ctx.session.isFastModeEnabled() && theme.icon.fast) {
+			content += ` ${theme.icon.fast}`;
+		}
+
 		// Add thinking level with dot separator
-		if (opts.showThinkingLevel !== false && state.model?.reasoning) {
-			const level = state.thinkingLevel || "off";
-			if (level !== "off") {
+		if (opts.showThinkingLevel !== false && state.model?.thinking) {
+			const level = state.thinkingLevel ?? ThinkingLevel.Off;
+			if (level !== ThinkingLevel.Off) {
 				const thinkingText = theme.thinking[level as keyof typeof theme.thinking];
 				if (thinkingText) {
 					content += `${theme.sep.dot}${thinkingText}`;
@@ -244,15 +250,8 @@ const contextPctSegment: StatusLineSegment = {
 		const autoIcon = ctx.autoCompactEnabled && theme.icon.auto ? ` ${theme.icon.auto}` : "";
 		const text = `${pct.toFixed(1)}%/${formatNumber(window)}${autoIcon}`;
 
-		let content: string;
-		if (pct > 90) {
-			content = withIcon(theme.icon.context, theme.fg("error", text));
-		} else if (pct > 70) {
-			content = withIcon(theme.icon.context, theme.fg("warning", text));
-		} else {
-			const colored = theme.fg("statusLineContext", text);
-			content = withIcon(theme.icon.context, colored);
-		}
+		const color = getContextUsageThemeColor(getContextUsageLevel(pct, window));
+		const content = withIcon(theme.icon.context, theme.fg(color, text));
 
 		return { content, visible: true };
 	},

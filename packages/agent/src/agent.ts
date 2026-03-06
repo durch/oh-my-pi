@@ -5,15 +5,16 @@ import {
 	type AssistantMessage,
 	type CursorExecHandlers,
 	type CursorToolResultHandler,
+	type Effort,
 	getBundledModel,
 	type ImageContent,
 	type Message,
 	type Model,
 	type ProviderSessionState,
+	type ServiceTier,
 	streamSimple,
 	type TextContent,
 	type ThinkingBudgets,
-	type ThinkingLevel,
 	type ToolChoice,
 	type ToolResultMessage,
 } from "@oh-my-pi/pi-ai";
@@ -122,6 +123,7 @@ export interface AgentOptions {
 	minP?: number;
 	presencePenalty?: number;
 	repetitionPenalty?: number;
+	serviceTier?: ServiceTier;
 
 	/**
 	 * Maximum delay in milliseconds to wait for a retry when the server requests a long wait.
@@ -173,7 +175,7 @@ export class Agent {
 	#state: AgentState = {
 		systemPrompt: "",
 		model: getBundledModel("google", "gemini-2.5-flash-lite-preview-06-17"),
-		thinkingLevel: "off",
+		thinkingLevel: undefined,
 		tools: [],
 		messages: [],
 		isStreaming: false,
@@ -200,6 +202,7 @@ export class Agent {
 	#minP?: number;
 	#presencePenalty?: number;
 	#repetitionPenalty?: number;
+	#serviceTier?: ServiceTier;
 	#maxRetryDelayMs?: number;
 	#getToolContext?: (toolCall?: ToolCallContext) => AgentToolContext | undefined;
 	#cursorExecHandlers?: CursorExecHandlers;
@@ -235,6 +238,7 @@ export class Agent {
 		this.#minP = opts.minP;
 		this.#presencePenalty = opts.presencePenalty;
 		this.#repetitionPenalty = opts.repetitionPenalty;
+		this.#serviceTier = opts.serviceTier;
 		this.#maxRetryDelayMs = opts.maxRetryDelayMs;
 		this.getApiKey = opts.getApiKey;
 		this.#getToolContext = opts.getToolContext;
@@ -344,6 +348,14 @@ export class Agent {
 		this.#repetitionPenalty = value;
 	}
 
+	get serviceTier(): ServiceTier | undefined {
+		return this.#serviceTier;
+	}
+
+	set serviceTier(value: ServiceTier | undefined) {
+		this.#serviceTier = value;
+	}
+
 	/**
 	 * Get the current max retry delay in milliseconds.
 	 */
@@ -404,7 +416,7 @@ export class Agent {
 		this.#state.model = m;
 	}
 
-	setThinkingLevel(l: ThinkingLevel) {
+	setThinkingLevel(l: Effort | undefined) {
 		this.#state.thinkingLevel = l;
 	}
 
@@ -657,7 +669,7 @@ export class Agent {
 		// Clear Cursor tool result buffer at start of each run
 		this.#cursorToolResultBuffer = [];
 
-		const reasoning = this.#state.thinkingLevel === "off" ? undefined : this.#state.thinkingLevel;
+		const reasoning = this.#state.thinkingLevel;
 
 		const context: AgentContext = {
 			systemPrompt: this.#state.systemPrompt,
@@ -696,6 +708,7 @@ export class Agent {
 			minP: this.#minP,
 			presencePenalty: this.#presencePenalty,
 			repetitionPenalty: this.#repetitionPenalty,
+			serviceTier: this.#serviceTier,
 			interruptMode: this.#interruptMode,
 			sessionId: this.#sessionId,
 			providerSessionState: this.#providerSessionState,

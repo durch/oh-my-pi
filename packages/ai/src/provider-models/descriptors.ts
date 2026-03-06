@@ -24,7 +24,8 @@ import {
 	nvidiaModelManagerOptions,
 	ollamaModelManagerOptions,
 	openaiModelManagerOptions,
-	opencodeModelManagerOptions,
+	opencodeGoModelManagerOptions,
+	opencodeZenModelManagerOptions,
 	openrouterModelManagerOptions,
 	qianfanModelManagerOptions,
 	qwenPortalModelManagerOptions,
@@ -121,7 +122,7 @@ function catalogDescriptor(
  */
 export const PROVIDER_DESCRIPTORS: readonly ProviderDescriptor[] = [
 	descriptor("anthropic", "claude-sonnet-4-6", config => anthropicModelManagerOptions(config)),
-	descriptor("openai", "gpt-5.1-codex", config => openaiModelManagerOptions(config)),
+	descriptor("openai", "gpt-5.4", config => openaiModelManagerOptions(config)),
 	descriptor("groq", "openai/gpt-oss-120b", config => groqModelManagerOptions(config)),
 	catalogDescriptor(
 		"huggingface",
@@ -145,14 +146,15 @@ export const PROVIDER_DESCRIPTORS: readonly ProviderDescriptor[] = [
 	),
 	catalogDescriptor(
 		"nanogpt",
-		"openai/gpt-5.2",
+		"openai/gpt-5.4",
 		config => nanoGptModelManagerOptions(config),
 		catalog("NanoGPT", ["NANO_GPT_API_KEY"]),
 	),
-	descriptor("opencode", "claude-sonnet-4-6", config => opencodeModelManagerOptions(config)),
+	descriptor("opencode-zen", "claude-sonnet-4-6", config => opencodeZenModelManagerOptions(config)),
+	descriptor("opencode-go", "kimi-k2.5", config => opencodeGoModelManagerOptions(config)),
 	catalogDescriptor(
 		"openrouter",
-		"openai/gpt-5.1-codex",
+		"openai/gpt-5.4",
 		config => openrouterModelManagerOptions(config),
 		catalog("OpenRouter", ["OPENROUTER_API_KEY"], { allowUnauthenticated: true }),
 	),
@@ -269,7 +271,7 @@ export const DEFAULT_MODEL_PER_PROVIDER: Record<KnownProvider, string> = {
 	minimax: "MiniMax-M2.5",
 	"minimax-code": "MiniMax-M2.5",
 	"minimax-code-cn": "MiniMax-M2.5",
-	"openai-codex": "gpt-5.3-codex",
+	"openai-codex": "gpt-5.4",
 	zai: "glm-4.6",
 	"gitlab-duo": "duo-chat-sonnet-4-5",
 } as Record<KnownProvider, string>;

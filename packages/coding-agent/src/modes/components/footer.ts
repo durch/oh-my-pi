@@ -1,10 +1,12 @@
 import * as fs from "node:fs";
+import { ThinkingLevel } from "@oh-my-pi/pi-agent-core";
 import { type Component, padding, truncateToWidth, visibleWidth } from "@oh-my-pi/pi-tui";
 import { formatNumber, getProjectDir } from "@oh-my-pi/pi-utils";
 import { theme } from "../../modes/theme/theme";
 import type { AgentSession } from "../../session/agent-session";
 import { shortenPath } from "../../tools/render-utils";
 import { findGitHeadPathAsync, sanitizeStatusText } from "../shared";
+import { getContextUsageLevel, getContextUsageThemeColor } from "./status-line/context-thresholds";
 
 /**
  * Footer component that shows pwd, token stats, and context usage
@@ -197,10 +199,10 @@ export class FooterComponent implements Component {
 			contextPercent === "?"
 				? `?/${formatNumber(contextWindow)}${autoIndicator}`
 				: `${contextPercent}%/${formatNumber(contextWindow)}${autoIndicator}`;
-		if (contextPercentValue > 90) {
-			contextPercentStr = theme.fg("error", contextPercentDisplay);
-		} else if (contextPercentValue > 70) {
-			contextPercentStr = theme.fg("warning", contextPercentDisplay);
+		if (contextUsage?.percent !== null && contextUsage?.percent !== undefined) {
+			const color = getContextUsageThemeColor(getContextUsageLevel(contextPercentValue, contextWindow));
+			contextPercentStr =
+				color === "statusLineContext" ? contextPercentDisplay : theme.fg(color, contextPercentDisplay);
 		} else {
 			contextPercentStr = contextPercentDisplay;
 		}
@@ -211,11 +213,11 @@ export class FooterComponent implements Component {
 		// Add model name on the right side, plus thinking level if model supports it
 		const modelName = state.model?.id || "no-model";
 
-		// Add thinking level hint if model supports reasoning and thinking is enabled
+		// Add thinking level hint when the current model advertises supported efforts
 		let rightSide = modelName;
-		if (state.model?.reasoning) {
-			const thinkingLevel = state.thinkingLevel || "off";
-			if (thinkingLevel !== "off") {
+		if (state.model?.thinking) {
+			const thinkingLevel = state.thinkingLevel ?? ThinkingLevel.Off;
+			if (thinkingLevel !== ThinkingLevel.Off) {
 				rightSide = `${modelName} • ${thinkingLevel}`;
 			}
 		}

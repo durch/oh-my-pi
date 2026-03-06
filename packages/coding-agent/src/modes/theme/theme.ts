@@ -1,6 +1,7 @@
 import * as fs from "node:fs";
 import * as path from "node:path";
-import type { ThinkingLevel } from "@oh-my-pi/pi-ai";
+import type { ThinkingLevel } from "@oh-my-pi/pi-agent-core";
+import type { Effort } from "@oh-my-pi/pi-ai";
 import {
 	detectMacOSAppearance,
 	type HighlightColors as NativeHighlightColors,
@@ -108,6 +109,7 @@ export type SymbolKey =
 	| "icon.warning"
 	| "icon.rewind"
 	| "icon.auto"
+	| "icon.fast"
 	| "icon.extensionSkill"
 	| "icon.extensionTool"
 	| "icon.extensionSlashCommand"
@@ -268,6 +270,7 @@ const UNICODE_SYMBOLS: SymbolMap = {
 	"icon.warning": "⚠",
 	"icon.rewind": "↶",
 	"icon.auto": "⟲",
+	"icon.fast": "⚡",
 	"icon.extensionSkill": "✦",
 	"icon.extensionTool": "🛠",
 	"icon.extensionSlashCommand": "⌘",
@@ -499,7 +502,7 @@ const NERD_SYMBOLS: SymbolMap = {
 	"icon.rewind": "\uf0e2",
 	// pick: 󰁨 | alt:   
 	"icon.auto": "\u{f0068}",
-	// pick:  | alt:  
+	"icon.fast": "\uf0e7",
 	"icon.extensionSkill": "\uf0eb",
 	// pick:  | alt:  
 	"icon.extensionTool": "\uf0ad",
@@ -680,6 +683,7 @@ const ASCII_SYMBOLS: SymbolMap = {
 	"icon.warning": "[!]",
 	"icon.rewind": "<-",
 	"icon.auto": "[A]",
+	"icon.fast": ">>",
 	"icon.extensionSkill": "SK",
 	"icon.extensionTool": "TL",
 	"icon.extensionSlashCommand": "/",
@@ -1220,7 +1224,7 @@ export class Theme {
 		return this.mode;
 	}
 
-	getThinkingBorderColor(level: ThinkingLevel): (str: string) => string {
+	getThinkingBorderColor(level: ThinkingLevel | Effort): (str: string) => string {
 		// Map thinking levels to dedicated theme colors
 		switch (level) {
 			case "off":
@@ -1381,6 +1385,7 @@ export class Theme {
 			warning: this.#symbols["icon.warning"],
 			rewind: this.#symbols["icon.rewind"],
 			auto: this.#symbols["icon.auto"],
+			fast: this.#symbols["icon.fast"],
 			extensionSkill: this.#symbols["icon.extensionSkill"],
 			extensionTool: this.#symbols["icon.extensionTool"],
 			extensionSlashCommand: this.#symbols["icon.extensionSlashCommand"],

@@ -2,7 +2,7 @@ import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import * as fs from "node:fs";
 import * as os from "node:os";
 import * as path from "node:path";
-import type { OpenAICompat } from "@oh-my-pi/pi-ai";
+import { Effort, type OpenAICompat, type ThinkingConfig } from "@oh-my-pi/pi-ai";
 import { kNoAuth, MODEL_ROLES, ModelRegistry } from "@oh-my-pi/pi-coding-agent/config/model-registry";
 import { AuthStorage } from "@oh-my-pi/pi-coding-agent/session/auth-storage";
 import { Snowflake } from "@oh-my-pi/pi-utils";
@@ -38,6 +38,7 @@ describe("ModelRegistry", () => {
 			id: string;
 			name: string;
 			reasoning: boolean;
+			thinking?: ThinkingConfig;
 			input: string[];
 			cost: { input: number; output: number; cacheRead: number; cacheWrite: number };
 			contextWindow: number;
@@ -48,7 +49,7 @@ describe("ModelRegistry", () => {
 	/** Create minimal provider config  */
 	function providerConfig(
 		baseUrl: string,
-		models: Array<{ id: string; name?: string }>,
+		models: Array<{ id: string; name?: string; reasoning?: boolean; thinking?: ThinkingConfig }>,
 		api: string = "anthropic-messages",
 	) {
 		return {
@@ -58,7 +59,8 @@ describe("ModelRegistry", () => {
 			models: models.map(m => ({
 				id: m.id,
 				name: m.name ?? m.id,
-				reasoning: false,
+				reasoning: m.reasoning ?? false,
+				thinking: m.thinking,
 				input: ["text"],
 				cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },
 				contextWindow: 100000,
@@ -241,6 +243,43 @@ describe("ModelRegistry", () => {
 			}
 		});
 
+		test("model-level baseUrl overrides provider-level baseUrl for custom models", () => {
+			writeRawModelsJson({
+				"opencode-go": {
+					baseUrl: "https://opencode.ai/zen/go/v1",
+					apiKey: "TEST_KEY",
+					models: [
+						{
+							id: "minimax-m2.5",
+							api: "anthropic-messages",
+							baseUrl: "https://opencode.ai/zen/go",
+							reasoning: true,
+							input: ["text"],
+							cost: { input: 0.3, output: 1.2, cacheRead: 0.03, cacheWrite: 0 },
+							contextWindow: 204800,
+							maxTokens: 131072,
+						},
+						{
+							id: "glm-5",
+							api: "openai-completions",
+							reasoning: true,
+							input: ["text"],
+							cost: { input: 1, output: 3.2, cacheRead: 0.2, cacheWrite: 0 },
+							contextWindow: 204800,
+							maxTokens: 131072,
+						},
+					],
+				},
+			});
+
+			const registry = new ModelRegistry(authStorage, modelsJsonPath);
+			const m25 = registry.find("opencode-go", "minimax-m2.5");
+			const glm5 = registry.find("opencode-go", "glm-5");
+
+			expect(m25?.baseUrl).toBe("https://opencode.ai/zen/go");
+			expect(glm5?.baseUrl).toBe("https://opencode.ai/zen/go/v1");
+		});
+
 		test("modelOverrides still apply when provider also defines models", () => {
 			writeRawModelsJson({
 				openrouter: {
@@ -310,6 +349,48 @@ describe("ModelRegistry", () => {
 			expect(anthropicModels.length).toBeGreaterThan(1);
 			expect(anthropicModels.some(m => m.id === "claude-custom")).toBe(false);
 			expect(anthropicModels.some(m => m.id.includes("claude"))).toBe(true);
+		});
+	});
+
+	describe("thinking metadata normalization", () => {
+		test("custom models preserve explicit thinking", () => {
+			const thinking: ThinkingConfig = {
+				mode: "anthropic-adaptive",
+				minLevel: Effort.Minimal,
+				maxLevel: Effort.High,
+			};
+
+			writeModelsJson({
+				anthropic: providerConfig("https://my-proxy.example.com/v1", [
+					{ id: "claude-custom", reasoning: true, thinking },
+				]),
+			});
+
+			const registry = new ModelRegistry(authStorage, modelsJsonPath);
+			const model = getModelsForProvider(registry, "anthropic").find(m => m.id === "claude-custom");
+
+			expect(model?.thinking).toEqual(thinking);
+		});
+
+		test("model overrides can replace canonical thinking metadata", () => {
+			writeRawModelsJson({
+				openrouter: {
+					modelOverrides: {
+						"anthropic/claude-sonnet-4": {
+							thinking: { mode: "budget", minLevel: Effort.Low, maxLevel: Effort.Medium },
+						},
+					},
+				},
+			});
+
+			const registry = new ModelRegistry(authStorage, modelsJsonPath);
+			const model = getModelsForProvider(registry, "openrouter").find(m => m.id === "anthropic/claude-sonnet-4");
+
+			expect(model?.thinking).toEqual({
+				mode: "budget",
+				minLevel: Effort.Low,
+				maxLevel: Effort.Medium,
+			});
 		});
 	});
 

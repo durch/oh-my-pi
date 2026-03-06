@@ -66,6 +66,24 @@ export type OptionsForApi<TApi extends Api> =
 	| StreamOptions
 	| (TApi extends keyof ApiOptionsMap ? ApiOptionsMap[TApi] : never);
 
+/** Canonical thinking transport used by a model. */
+export type ThinkingControlMode =
+	| "effort"
+	| "budget"
+	| "google-level"
+	| "anthropic-adaptive"
+	| "anthropic-budget-effort";
+
+/** Per-model thinking capabilities used to clamp and map user-facing effort levels. */
+export interface ThinkingConfig {
+	/** Least intensive supported user-facing effort level. */
+	minLevel: Effort;
+	/** Most intensive supported user-facing effort level. */
+	maxLevel: Effort;
+	/** Provider-specific transport used to encode the selected effort. */
+	mode: ThinkingControlMode;
+}
+
 export type KnownProvider =
 	| "amazon-bedrock"
 	| "anthropic"
@@ -90,7 +108,8 @@ export type KnownProvider =
 	| "zai"
 	| "mistral"
 	| "minimax"
-	| "opencode"
+	| "opencode-go"
+	| "opencode-zen"
 	| "synthetic"
 	| "cloudflare-ai-gateway"
 	| "huggingface"
@@ -109,10 +128,10 @@ export type KnownProvider =
 	| "lm-studio";
 export type Provider = KnownProvider | string;
 
-import type { ThinkingEffort, ThinkingLevel } from "./thinking";
+import type { Effort } from "./model-thinking";
 
 /** Token budgets for each thinking level (token-based providers only) */
-export type ThinkingBudgets = { [key in ThinkingEffort]?: number };
+export type ThinkingBudgets = { [key in Effort]?: number };
 
 export type MessageAttribution = "user" | "agent";
 
@@ -127,6 +146,9 @@ export type ToolChoice =
 
 // Base options all providers share
 export type CacheRetention = "none" | "short" | "long";
+
+/** OpenAI service tier for processing priority. Only applies to OpenAI-compatible APIs. */
+export type ServiceTier = "auto" | "default" | "flex" | "scale" | "priority";
 
 export interface ProviderSessionState {
 	close(): void;
@@ -188,7 +210,7 @@ export interface StreamOptions {
 
 // Unified options with reasoning passed to streamSimple() and completeSimple()
 export interface SimpleStreamOptions extends StreamOptions {
-	reasoning?: ThinkingLevel;
+	reasoning?: Effort;
 	/** Custom token budgets for thinking levels (token-based providers only) */
 	thinkingBudgets?: ThinkingBudgets;
 	/** Cursor exec handlers for local tool execution */
@@ -197,6 +219,8 @@ export interface SimpleStreamOptions extends StreamOptions {
 	cursorOnToolResult?: CursorToolResultHandler;
 	/** Optional tool choice override for compatible providers */
 	toolChoice?: ToolChoice;
+	/** OpenAI service tier for processing priority/cost control. Ignored by non-OpenAI providers. */
+	serviceTier?: ServiceTier;
 	/** API format for Kimi Code provider: "openai" or "anthropic" (default: "anthropic") */
 	kimiApiFormat?: "openai" | "anthropic";
 	/** API format for Synthetic provider: "openai" or "anthropic" (default: "openai") */
@@ -262,6 +286,13 @@ export interface Usage {
 
 export type StopReason = "stop" | "length" | "toolUse" | "error" | "aborted";
 
+export interface OpenAIResponsesHistoryPayload {
+	type: "openaiResponsesHistory";
+	items: Array<Record<string, unknown>>;
+}
+
+export type ProviderPayload = OpenAIResponsesHistoryPayload;
+
 export interface UserMessage {
 	role: "user";
 	content: string | (TextContent | ImageContent)[];
@@ -269,6 +300,8 @@ export interface UserMessage {
 	synthetic?: boolean;
 	/** Who initiated this message for billing/attribution semantics. */
 	attribution?: MessageAttribution;
+	/** Provider-specific opaque payload used to reconstruct transport-native history. */
+	providerPayload?: ProviderPayload;
 	timestamp: number; // Unix timestamp in milliseconds
 }
 
@@ -277,6 +310,8 @@ export interface DeveloperMessage {
 	content: string | (TextContent | ImageContent)[];
 	/** Who initiated this message for billing/attribution semantics. */
 	attribution?: MessageAttribution;
+	/** Provider-specific opaque payload used to reconstruct transport-native history. */
+	providerPayload?: ProviderPayload;
 	timestamp: number; // Unix timestamp in milliseconds
 }
 
@@ -289,6 +324,8 @@ export interface AssistantMessage {
 	usage: Usage;
 	stopReason: StopReason;
 	errorMessage?: string;
+	/** Provider-specific opaque payload used to reconstruct transport-native history. */
+	providerPayload?: ProviderPayload;
 	timestamp: number; // Unix timestamp in milliseconds
 	duration?: number; // Request duration in milliseconds
 	ttft?: number; // Time to first token in milliseconds
@@ -457,6 +494,8 @@ export interface Model<TApi extends Api = any> {
 	contextPromotionTarget?: string;
 	/** Provider-assigned priority value (lower = higher priority). */
 	priority?: number;
+	/** Canonical thinking capability metadata for this model. */
+	thinking?: ThinkingConfig;
 	/** Compatibility overrides for openai-completions API. If not set, auto-detected from baseUrl. */
 	compat?: TApi extends "openai-completions" ? OpenAICompat : never;
 }

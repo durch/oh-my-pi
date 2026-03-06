@@ -17,6 +17,7 @@ import type {
 	Message,
 	Model,
 	OpenAICompat,
+	ServiceTier,
 	StopReason,
 	StreamFunction,
 	StreamOptions,
@@ -110,6 +111,7 @@ function hasToolHistory(messages: Message[]): boolean {
 export interface OpenAICompletionsOptions extends StreamOptions {
 	toolChoice?: ToolChoice;
 	reasoning?: "minimal" | "low" | "medium" | "high" | "xhigh";
+	serviceTier?: ServiceTier;
 }
 
 type OpenAICompletionsSamplingParams = OpenAI.Chat.Completions.ChatCompletionCreateParamsStreaming & {
@@ -596,6 +598,9 @@ function buildParams(model: Model<"openai-completions">, context: Context, optio
 	if (options?.repetitionPenalty !== undefined) {
 		params.repetition_penalty = options.repetitionPenalty;
 	}
+	if (options?.serviceTier !== undefined) {
+		params.service_tier = options.serviceTier;
+	}
 
 	if (context.tools) {
 		params.tools = convertTools(context.tools, compat);
@@ -1075,7 +1080,8 @@ function detectCompat(model: Model<"openai-completions">): ResolvedOpenAICompat 
 		baseUrl.includes("chutes.ai") ||
 		baseUrl.includes("deepseek.com") ||
 		isZai ||
-		provider === "opencode" ||
+		provider === "opencode-zen" ||
+		provider === "opencode-go" ||
 		baseUrl.includes("opencode.ai");
 
 	const useMaxTokens = provider === "mistral" || baseUrl.includes("mistral.ai") || baseUrl.includes("chutes.ai");

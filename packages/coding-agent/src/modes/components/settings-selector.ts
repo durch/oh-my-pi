@@ -1,4 +1,5 @@
-import type { ThinkingLevel } from "@oh-my-pi/pi-ai";
+import type { ThinkingLevel } from "@oh-my-pi/pi-agent-core";
+import type { Effort } from "@oh-my-pi/pi-ai";
 import {
 	Container,
 	matchesKey,
@@ -134,9 +135,9 @@ function getSettingsTabs(): Tab[] {
  */
 export interface SettingsRuntimeContext {
 	/** Available thinking levels (from session) */
-	availableThinkingLevels: ThinkingLevel[];
+	availableThinkingLevels: Effort[];
 	/** Current thinking level (from session) */
-	thinkingLevel: ThinkingLevel;
+	thinkingLevel: ThinkingLevel | undefined;
 	/** Available themes */
 	availableThemes: string[];
 	/** Working directory for plugins tab */
@@ -272,7 +273,7 @@ export class SettingsSelectorComponent extends Container {
 					id: def.path,
 					label: def.label,
 					description: def.description,
-					currentValue: String(currentValue ?? ""),
+					currentValue: this.#getSubmenuCurrentValue(def.path, currentValue),
 					submenu: (cv, done) => this.#createSubmenu(def, cv, done),
 				};
 		}
@@ -283,6 +284,14 @@ export class SettingsSelectorComponent extends Container {
 	 */
 	#getCurrentValue(def: SettingDef): unknown {
 		return settings.get(def.path);
+	}
+
+	#getSubmenuCurrentValue(path: SettingPath, value: unknown): string {
+		const rawValue = String(value ?? "");
+		if (path === "compaction.thresholdPercent" && (rawValue === "-1" || rawValue === "")) {
+			return "default";
+		}
+		return rawValue;
 	}
 
 	/**
@@ -382,7 +391,9 @@ export class SettingsSelectorComponent extends Container {
 	#setSettingValue(path: SettingPath, value: string): void {
 		// Handle number conversions
 		const currentValue = settings.get(path);
-		if (typeof currentValue === "number") {
+		if (path === "compaction.thresholdPercent" && value === "default") {
+			settings.set(path, -1 as never);
+		} else if (typeof currentValue === "number") {
 			settings.set(path, Number(value) as never);
 		} else if (typeof currentValue === "boolean") {
 			settings.set(path, (value === "true") as never);

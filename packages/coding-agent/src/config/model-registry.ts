@@ -4,6 +4,7 @@ import {
 	type Context,
 	createModelManager,
 	DEFAULT_LOCAL_TOKEN,
+	enrichModelThinking,
 	getBundledModels,
 	getBundledProviders,
 	googleAntigravityModelManagerOptions,
@@ -18,6 +19,7 @@ import {
 	registerCustomApi,
 	registerOAuthProvider,
 	type SimpleStreamOptions,
+	type ThinkingConfig,
 	unregisterCustomApis,
 	unregisterOAuthProviders,
 } from "@oh-my-pi/pi-ai";
@@ -72,6 +74,28 @@ const OpenAICompatSchema = Type.Object({
 	vercelGatewayRouting: Type.Optional(VercelGatewayRoutingSchema),
 });
 
+const EffortSchema = Type.Union([
+	Type.Literal("minimal"),
+	Type.Literal("low"),
+	Type.Literal("medium"),
+	Type.Literal("high"),
+	Type.Literal("xhigh"),
+]);
+
+const ThinkingControlModeSchema = Type.Union([
+	Type.Literal("effort"),
+	Type.Literal("budget"),
+	Type.Literal("google-level"),
+	Type.Literal("anthropic-adaptive"),
+	Type.Literal("anthropic-budget-effort"),
+]);
+
+const ModelThinkingSchema = Type.Object({
+	minLevel: EffortSchema,
+	maxLevel: EffortSchema,
+	mode: ThinkingControlModeSchema,
+});
+
 // Schema for custom model definition
 // Most fields are optional with sensible defaults for local models (Ollama, LM Studio, etc.)
 const ModelDefinitionSchema = Type.Object({
@@ -88,7 +112,9 @@ const ModelDefinitionSchema = Type.Object({
 			Type.Literal("google-vertex"),
 		]),
 	),
+	baseUrl: Type.Optional(Type.String({ minLength: 1 })),
 	reasoning: Type.Optional(Type.Boolean()),
+	thinking: Type.Optional(ModelThinkingSchema),
 	input: Type.Optional(Type.Array(Type.Union([Type.Literal("text"), Type.Literal("image")]))),
 	cost: Type.Optional(
 		Type.Object({
@@ -110,6 +136,7 @@ const ModelDefinitionSchema = Type.Object({
 const ModelOverrideSchema = Type.Object({
 	name: Type.Optional(Type.String({ minLength: 1 })),
 	reasoning: Type.Optional(Type.Boolean()),
+	thinking: Type.Optional(ModelThinkingSchema),
 	input: Type.Optional(Type.Array(Type.Union([Type.Literal("text"), Type.Literal("image")]))),
 	cost: Type.Optional(
 		Type.Object({
@@ -375,6 +402,7 @@ function applyModelOverride(model: Model<Api>, override: ModelOverride): Model<A
 	const result = { ...model };
 	if (override.name !== undefined) result.name = override.name;
 	if (override.reasoning !== undefined) result.reasoning = override.reasoning;
+	if (override.thinking !== undefined) result.thinking = override.thinking as ThinkingConfig;
 	if (override.input !== undefined) result.input = override.input as ("text" | "image")[];
 	if (override.contextWindow !== undefined) result.contextWindow = override.contextWindow;
 	if (override.maxTokens !== undefined) result.maxTokens = override.maxTokens;
@@ -392,14 +420,16 @@ function applyModelOverride(model: Model<Api>, override: ModelOverride): Model<A
 		result.headers = { ...model.headers, ...override.headers };
 	}
 	result.compat = mergeCompat(model.compat, override.compat);
-	return result;
+	return enrichModelThinking(result);
 }
 
 interface CustomModelDefinitionLike {
 	id: string;
 	name?: string;
 	api?: Api;
+	baseUrl?: string;
 	reasoning?: boolean;
+	thinking?: ThinkingConfig;
 	input?: ("text" | "image")[];
 	cost?: { input: number; output: number; cacheRead: number; cacheWrite: number };
 	contextWindow?: number;
@@ -445,13 +475,14 @@ function buildCustomModel(
 	const withDefaults = options.useDefaults;
 	const cost = modelDef.cost ?? (withDefaults ? { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 } : undefined);
 	const input = modelDef.input ?? (withDefaults ? ["text"] : undefined);
-	return {
+	return enrichModelThinking({
 		id: modelDef.id,
 		name: modelDef.name ?? (withDefaults ? modelDef.id : undefined),
 		api,
 		provider: providerName,
-		baseUrl: providerBaseUrl,
+		baseUrl: modelDef.baseUrl ?? providerBaseUrl,
 		reasoning: modelDef.reasoning ?? (withDefaults ? false : undefined),
+		thinking: modelDef.thinking as ThinkingConfig | undefined,
 		input: input as ("text" | "image")[],
 		cost,
 		contextWindow: modelDef.contextWindow ?? (withDefaults ? 128000 : undefined),
@@ -460,7 +491,7 @@ function buildCustomModel(
 		compat: modelDef.compat,
 		contextPromotionTarget: modelDef.contextPromotionTarget,
 		premiumMultiplier: modelDef.premiumMultiplier,
-	} as Model<Api>;
+	} as Model<Api>);
 }
 
 /**
@@ -537,7 +568,7 @@ export class ModelRegistry {
 		const builtInModels = this.#loadBuiltInModels(overrides, modelOverrides);
 		const combined = this.#mergeCustomModels(builtInModels, customModels);
 
-		this.#models = combined;
+		this.#models = this.#applyHardcodedModelPolicies(combined);
 	}
 
 	/** Load built-in models, applying provider and per-model overrides */
@@ -716,7 +747,7 @@ export class ModelRegistry {
 					: model;
 			}),
 		);
-		this.#models = this.#applyModelOverrides(merged, this.#modelOverrides);
+		this.#models = this.#applyHardcodedModelPolicies(this.#applyModelOverrides(merged, this.#modelOverrides));
 	}
 
 	async #discoverProviderModels(providerConfig: DiscoveryProviderConfig): Promise<Model<Api>[]> {
@@ -853,19 +884,21 @@ export class ModelRegistry {
 			for (const item of models) {
 				const id = item.model || item.name;
 				if (!id) continue;
-				discovered.push({
-					id,
-					name: item.name || id,
-					api: providerConfig.api,
-					provider: providerConfig.provider,
-					baseUrl: `${endpoint}/v1`,
-					reasoning: false,
-					input: ["text"],
-					cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },
-					contextWindow: 128000,
-					maxTokens: 8192,
-					headers: providerConfig.headers,
-				});
+				discovered.push(
+					enrichModelThinking({
+						id,
+						name: item.name || id,
+						api: providerConfig.api,
+						provider: providerConfig.provider,
+						baseUrl: `${endpoint}/v1`,
+						reasoning: false,
+						input: ["text"],
+						cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },
+						contextWindow: 128000,
+						maxTokens: 8192,
+						headers: providerConfig.headers,
+					}),
+				);
 			}
 			return this.#applyProviderModelOverrides(providerConfig.provider, discovered);
 		} catch (error) {
@@ -907,24 +940,26 @@ export class ModelRegistry {
 			for (const item of models) {
 				const id = item.id;
 				if (!id) continue;
-				discovered.push({
-					id,
-					name: id,
-					api: providerConfig.api,
-					provider: providerConfig.provider,
-					baseUrl,
-					reasoning: false,
-					input: ["text"],
-					cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },
-					contextWindow: 128000,
-					maxTokens: 8192,
-					headers,
-					compat: {
-						supportsStore: false,
-						supportsDeveloperRole: false,
-						supportsReasoningEffort: false,
-					},
-				});
+				discovered.push(
+					enrichModelThinking({
+						id,
+						name: id,
+						api: providerConfig.api,
+						provider: providerConfig.provider,
+						baseUrl,
+						reasoning: false,
+						input: ["text"],
+						cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },
+						contextWindow: 128000,
+						maxTokens: 8192,
+						headers,
+						compat: {
+							supportsStore: false,
+							supportsDeveloperRole: false,
+							supportsReasoningEffort: false,
+						},
+					}),
+				);
 			}
 			return this.#applyProviderModelOverrides(providerConfig.provider, discovered);
 		} catch (error) {
@@ -980,6 +1015,15 @@ export class ModelRegistry {
 		});
 	}
 
+	#applyHardcodedModelPolicies(models: Model<Api>[]): Model<Api>[] {
+		return models.map(model => {
+			if (model.id === "gpt-5.4") {
+				return { ...model, contextWindow: 1_000_000 };
+			}
+			return model;
+		});
+	}
+
 	#parseModels(config: ModelsConfig): Model<Api>[] {
 		const models: Model<Api>[] = [];
 
@@ -997,7 +1041,7 @@ export class ModelRegistry {
 					providerConfig.headers,
 					providerConfig.apiKey,
 					providerConfig.authHeader,
-					modelDef,
+					modelDef as CustomModelDefinitionLike,
 					{ useDefaults: true },
 				);
 				if (!model) continue;
@@ -1150,7 +1194,7 @@ export class ModelRegistry {
 					config.headers,
 					config.apiKey,
 					config.authHeader,
-					modelDef,
+					modelDef as CustomModelDefinitionLike,
 					{ useDefaults: false },
 				);
 				if (!model) {
@@ -1205,7 +1249,9 @@ export interface ProviderConfigInput {
 		id: string;
 		name: string;
 		api?: Api;
+		baseUrl?: string;
 		reasoning: boolean;
+		thinking?: ThinkingConfig;
 		input: ("text" | "image")[];
 		cost: { input: number; output: number; cacheRead: number; cacheWrite: number };
 		contextWindow: number;

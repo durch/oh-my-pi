@@ -7,7 +7,7 @@
  * 2. That's it - it appears in the UI automatically
  */
 
-import { getAvailableThinkingLevels, getThinkingMetadata } from "@oh-my-pi/pi-ai";
+import { THINKING_EFFORTS } from "@oh-my-pi/pi-ai";
 import { TERMINAL } from "@oh-my-pi/pi-tui";
 import {
 	getDefault,
@@ -19,6 +19,7 @@ import {
 	type SettingPath,
 	type SettingTab,
 } from "../../config/settings-schema";
+import { getThinkingLevelMetadata } from "../../thinking";
 
 // ═══════════════════════════════════════════════════════════════════════════
 // UI Definition Types
@@ -68,6 +69,26 @@ type OptionList = ReadonlyArray<{ value: string; label: string; description?: st
 type OptionProvider = (() => OptionList) | OptionList;
 
 const OPTION_PROVIDERS: Partial<Record<SettingPath, OptionProvider>> = {
+	// Context maintenance strategy
+	"compaction.strategy": [
+		{ value: "context-full", label: "Context-full", description: "Summarize in-place and keep the current session" },
+		{ value: "handoff", label: "Handoff", description: "Generate handoff and continue in a new session" },
+		{
+			value: "off",
+			label: "Off",
+			description: "Disable automatic context maintenance (same behavior as Auto-compact off)",
+		},
+	],
+	// Context maintenance threshold
+	"compaction.thresholdPercent": [
+		{ value: "default", label: "Default", description: "Legacy reserve-based threshold" },
+		{ value: "70", label: "70%", description: "Very early maintenance" },
+		{ value: "75", label: "75%", description: "Early maintenance" },
+		{ value: "80", label: "80%", description: "Balanced" },
+		{ value: "85", label: "85%", description: "Typical threshold" },
+		{ value: "90", label: "90%", description: "Aggressive context usage" },
+		{ value: "95", label: "95%", description: "Near context limit" },
+	],
 	// Retry max retries
 	"retry.maxRetries": [
 		{ value: "1", label: "1 retry" },
@@ -231,7 +252,7 @@ const OPTION_PROVIDERS: Partial<Record<SettingPath, OptionProvider>> = {
 		{ value: "on", label: "On", description: "Force websockets for OpenAI Codex models" },
 	],
 	// Default thinking level
-	defaultThinkingLevel: [...getAvailableThinkingLevels().map(getThinkingMetadata)],
+	defaultThinkingLevel: [...THINKING_EFFORTS.map(getThinkingLevelMetadata)],
 	// Temperature
 	temperature: [
 		{ value: "-1", label: "Default", description: "Use provider default" },
@@ -276,6 +297,14 @@ const OPTION_PROVIDERS: Partial<Record<SettingPath, OptionProvider>> = {
 		{ value: "1.1", label: "1.1", description: "Mild penalty" },
 		{ value: "1.2", label: "1.2", description: "Balanced" },
 		{ value: "1.5", label: "1.5", description: "Strong penalty" },
+	],
+	serviceTier: [
+		{ value: "none", label: "None", description: "Omit service_tier parameter" },
+		{ value: "auto", label: "Auto", description: "Use provider default tier selection" },
+		{ value: "default", label: "Default", description: "Standard priority processing" },
+		{ value: "flex", label: "Flex", description: "Use flexible capacity tier when available" },
+		{ value: "scale", label: "Scale", description: "Use Scale Tier credits when available" },
+		{ value: "priority", label: "Priority", description: "Use Priority processing" },
 	],
 	// Symbol preset
 	symbolPreset: [

@@ -1,4 +1,4 @@
-import { getAvailableThinkingLevels } from "@oh-my-pi/pi-ai";
+import { THINKING_EFFORTS } from "@oh-my-pi/pi-ai";
 
 /** Unified settings schema - single source of truth for all settings.
  * Unified settings schema - single source of truth for all settings.
@@ -192,7 +192,7 @@ export const SETTINGS_SCHEMA = {
 	},
 	defaultThinkingLevel: {
 		type: "enum",
-		values: getAvailableThinkingLevels(),
+		values: THINKING_EFFORTS,
 		default: "high",
 		ui: {
 			tab: "agent",
@@ -345,9 +345,48 @@ export const SETTINGS_SCHEMA = {
 			description: "Automatically compact context when it gets too large",
 		},
 	},
+	"compaction.strategy": {
+		type: "enum",
+		values: ["context-full", "handoff", "off"] as const,
+		default: "context-full",
+		ui: {
+			tab: "agent",
+			label: "Context-full strategy",
+			description: "Choose in-place context-full maintenance, auto-handoff, or disable auto maintenance (off)",
+			submenu: true,
+		},
+	},
+	"compaction.thresholdPercent": {
+		type: "number",
+		default: -1,
+		ui: {
+			tab: "agent",
+			label: "Context threshold",
+			description: "Percent threshold for context maintenance; set to Default to use legacy reserve-based behavior",
+			submenu: true,
+		},
+	},
+	"compaction.handoffSaveToDisk": {
+		type: "boolean",
+		default: false,
+		ui: {
+			tab: "agent",
+			label: "Save auto-handoff docs",
+			description: "Save generated handoff documents to markdown files for the auto-handoff flow",
+		},
+	},
 	"compaction.reserveTokens": { type: "number", default: 16384 },
 	"compaction.keepRecentTokens": { type: "number", default: 20000 },
 	"compaction.autoContinue": { type: "boolean", default: true },
+	"compaction.remoteEnabled": {
+		type: "boolean",
+		default: true,
+		ui: {
+			tab: "agent",
+			label: "Remote compaction",
+			description: "Use remote compaction endpoints when available instead of local summarization",
+		},
+	},
 	"compaction.remoteEndpoint": { type: "string", default: undefined },
 
 	// ─────────────────────────────────────────────────────────────────────────
@@ -1186,6 +1225,17 @@ export const SETTINGS_SCHEMA = {
 			submenu: true,
 		},
 	},
+	serviceTier: {
+		type: "enum",
+		values: ["none", "auto", "default", "flex", "scale", "priority"] as const,
+		default: "none",
+		ui: {
+			tab: "agent",
+			label: "Service tier",
+			description: "OpenAI processing priority (none = omit parameter)",
+			submenu: true,
+		},
+	},
 } as const;
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -1265,9 +1315,13 @@ export type StatusLineSeparatorStyle = SettingValue<"statusLine.separator">;
 
 export interface CompactionSettings {
 	enabled: boolean;
+	strategy: "context-full" | "handoff" | "off";
+	thresholdPercent: number;
 	reserveTokens: number;
 	keepRecentTokens: number;
+	handoffSaveToDisk: boolean;
 	autoContinue: boolean;
+	remoteEnabled: boolean;
 	remoteEndpoint: string | undefined;
 }
 
