@@ -19,6 +19,7 @@ import { Settings, type SkillsSettings } from "./config/settings";
 import { CursorExecHandlers } from "./cursor";
 import "./discovery";
 import { resolveConfigValue } from "./config/resolve-config-value";
+import { validateContextManagerConfig } from "./context-manager";
 import { initializeWithSettings } from "./discovery";
 import { TtsrManager } from "./export/ttsr";
 import {
@@ -614,6 +615,7 @@ export async function createAgentSession(options: CreateAgentSessionOptions = {}
 		async () => options.settings ?? (await Settings.init({ cwd, agentDir })),
 	);
 	logger.time("initializeWithSettings", initializeWithSettings, settings);
+	validateContextManagerConfig(settings);
 	const skillsSettings = settings.getGroup("skills") as SkillsSettings;
 	const discoveredSkillsPromise =
 		options.skills === undefined ? discoverSkills(cwd, agentDir, skillsSettings) : undefined;

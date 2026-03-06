@@ -79,7 +79,8 @@ export type StatusLineSegmentId =
 	| "session"
 	| "hostname"
 	| "cache_read"
-	| "cache_write";
+	| "cache_write"
+	| "context_mgr";
 
 interface UiMetadata {
 	tab: SettingTab;
@@ -321,6 +322,22 @@ export const SETTINGS_SCHEMA = {
 			tab: "agent",
 			label: "Auto-promote context",
 			description: "Promote to a larger-context model on context overflow instead of compacting",
+		},
+	},
+
+	// ─────────────────────────────────────────────────────────────────────────
+	// Context manager settings
+	// ─────────────────────────────────────────────────────────────────────────
+	"contextManager.mode": {
+		type: "enum",
+		values: ["legacy", "shadow", "assembler"] as const,
+		default: "legacy",
+		ui: {
+			tab: "agent",
+			label: "Context manager",
+			description:
+				"Active context management strategy (legacy = current, shadow = observe-only assembler, assembler = assembler-managed)",
+			submenu: true,
 		},
 	},
 
@@ -1379,6 +1396,10 @@ export interface BashInterceptorRule {
 	allowSubcommands?: string[];
 }
 
+export interface ContextManagerSettings {
+	mode: "legacy" | "shadow" | "assembler";
+}
+
 /** Map group prefix -> typed settings interface */
 export interface GroupTypeMap {
 	compaction: CompactionSettings;
@@ -1394,6 +1415,9 @@ export interface GroupTypeMap {
 	thinkingBudgets: ThinkingBudgetsSettings;
 	stt: SttSettings;
 	modelRoles: Record<string, string>;
+	contextManager: ContextManagerSettings;
 }
+
+export type ContextManagerMode = SettingValue<"contextManager.mode">;
 
 export type GroupPrefix = keyof GroupTypeMap;
