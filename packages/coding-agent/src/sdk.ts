@@ -1545,6 +1545,14 @@ export async function createAgentSession(options: CreateAgentSessionOptions = {}
 		});
 	}
 
+	// ── Shadow-mode context telemetry ──────────────────────────────────────
+	if (isShadowMode(settings)) {
+		const telemetry = new ShadowTelemetry({ traceId: sessionId, mode: "shadow" });
+		session.subscribe(telemetry.observer);
+		postmortem.register("shadow-telemetry-flush", () => telemetry.close());
+		logger.debug("Shadow telemetry attached", { traceId: sessionId, path: telemetry.writer.filePath });
+	}
+
 	return {
 		session,
 		extensionsResult,
