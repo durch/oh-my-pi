@@ -248,6 +248,15 @@ describe("ToolResultBridge", () => {
 			expect(locators[0].how.params?.artifactId).toBe("42");
 		});
 
+		test("extracts non-numeric artifact IDs", () => {
+			const bridge = createTestBridge();
+			bridge.handleToolResult("bash", "call-3b", {}, "artifact://6-Extensions-12", false);
+
+			const locators = bridge.contract.locatorMap;
+			expect(locators).toHaveLength(1);
+			expect(locators[0].how.params?.artifactId).toBe("6-Extensions-12");
+		});
+
 		test("does NOT generate locator for control tools", () => {
 			const bridge = createTestBridge();
 			bridge.handleToolResult("todo_write", "call-4", {}, "ok", false);
@@ -393,6 +402,23 @@ describe("ToolResultBridge", () => {
 			expect(keys).toContain("read:c3");
 			expect(keys).toContain("write:c4");
 		});
+
+		test("STM locatorKeys are pruned when locators are invalidated", () => {
+			const bridge = createTestBridge();
+
+			bridge.handleToolResult("read", "c1", { path: "a.ts" }, "x", false);
+			bridge.handleToolResult("read", "c2", { path: "b.ts" }, "y", false);
+			expect(bridge.contract.shortTerm[0].locatorKeys).toContain("read:c1");
+			expect(bridge.contract.shortTerm[0].locatorKeys).toContain("read:c2");
+
+			// Edit a.ts — invalidates read:c1
+			bridge.handleToolResult("edit", "c3", { path: "a.ts" }, "ok", false);
+
+			const stmKeys = bridge.contract.shortTerm[0].locatorKeys;
+			expect(stmKeys).not.toContain("read:c1");
+			expect(stmKeys).toContain("read:c2");
+			expect(stmKeys).toContain("edit:c3");
+		});
 	});
 
 	describe("locator eviction", () => {
@@ -413,6 +439,22 @@ describe("ToolResultBridge", () => {
 			expect(keys).toContain("read:c2");
 			expect(keys).toContain("read:c3");
 			expect(keys).toContain("read:c4");
+		});
+
+		test("STM locatorKeys are pruned when locators are evicted", () => {
+			const bridge = createTestBridge({ maxLocatorEntries: 2 });
+
+			bridge.handleToolResult("read", "c1", { path: "a.ts" }, "x", false);
+			bridge.handleToolResult("read", "c2", { path: "b.ts" }, "y", false);
+			expect(bridge.contract.shortTerm[0].locatorKeys).toContain("read:c1");
+
+			// Adding c3 evicts c1
+			bridge.handleToolResult("read", "c3", { path: "c.ts" }, "z", false);
+
+			const stmKeys = bridge.contract.shortTerm[0].locatorKeys;
+			expect(stmKeys).not.toContain("read:c1");
+			expect(stmKeys).toContain("read:c2");
+			expect(stmKeys).toContain("read:c3");
 		});
 	});
 });

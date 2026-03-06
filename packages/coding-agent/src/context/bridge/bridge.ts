@@ -229,7 +229,9 @@ export class ToolResultBridge {
 		}
 
 		if (removed > 0) {
+			const remainingKeys = new Set(remaining.map(l => l.key));
 			this.#contract.locatorMap = remaining;
+			this.#stm.locatorKeys = this.#stm.locatorKeys.filter(k => remainingKeys.has(k));
 			logger.debug("Bridge invalidated locators", { paths, removed });
 		}
 	}
@@ -274,7 +276,11 @@ export class ToolResultBridge {
 		// Evict oldest entries if at capacity
 		const max = this.#config.maxLocatorEntries;
 		while (this.#contract.locatorMap.length >= max) {
-			this.#contract.locatorMap.shift();
+			const evicted = this.#contract.locatorMap.shift();
+			if (evicted) {
+				const idx = this.#stm.locatorKeys.indexOf(evicted.key);
+				if (idx !== -1) this.#stm.locatorKeys.splice(idx, 1);
+			}
 		}
 
 		this.#contract.locatorMap.push(locator);
@@ -289,6 +295,6 @@ export class ToolResultBridge {
 /** Extract artifact ID from a result string containing artifact:// URLs. */
 function extractArtifactId(result: unknown): string | null {
 	if (typeof result !== "string") return null;
-	const match = result.match(/artifact:\/\/(\d+)/);
+	const match = result.match(/artifact:\/\/([^\s/]+)/);
 	return match ? match[1] : null;
 }
