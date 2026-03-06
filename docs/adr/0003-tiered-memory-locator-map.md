@@ -135,6 +135,17 @@ This ADR is intentionally iterative.
 - Refine scoring, eviction, and promotion rules through measured telemetry.
 - Any change that collapses tiers or bypasses locator/provenance discipline requires a follow-up ADR.
 
+## Cutover Invariant: Single Active Context Manager
+
+Only one context-management system may be active in prompt assembly at runtime.
+
+- During migration, shadow validation may observe and score, but it must not inject prompt context.
+- Once the new assembler path is activated, legacy context management must be disabled and removed from the active path.
+- Running assembler assembly and legacy compaction-based context assembly simultaneously is prohibited.
+- If configuration would activate both systems, runtime must fail closed with a clear error.
+
+This invariant is mandatory for Option C cutover sequencing and protects against mixed-behavior drift.
+
 ## Immediate Implementation Path in Fork
 
 1. Build telemetry extension to capture code-context and execution-state signals.
