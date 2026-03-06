@@ -3,15 +3,9 @@ name: CI
 on:
   push:
     branches: [main]
-    tags: ["v*"]
   pull_request:
     branches: [main]
   workflow_dispatch:
-    inputs:
-      skip_npm:
-        description: "Skip npm publish"
-        type: boolean
-        default: false
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
@@ -19,7 +13,7 @@ concurrency:
 
 jobs:
   rust:
-    runs-on: ubuntu-22.04
+    runs-on: namespace-profile-default
     env:
       RUSTFLAGS: -C target-cpu=x86-64-v3
     steps:
@@ -39,40 +33,28 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        include: ${{ startsWith(github.ref, 'refs/tags/v') && fromJSON('[
-          {"os":"ubuntu-22.04","platform":"linux","arch":"x64","variants":"baseline modern"},
-          {"os":"ubuntu-22.04","platform":"linux","arch":"arm64","target":"aarch64-unknown-linux-gnu"},
-          {"os":"macos-15-intel","platform":"darwin","arch":"x64","variants":"baseline modern"},
-          {"os":"macos-14","platform":"darwin","arch":"arm64"},
-          {"os":"windows-latest","platform":"win32","arch":"x64","variants":"baseline modern"}
-          ]') || fromJSON('[
-          {"os":"ubuntu-22.04","platform":"linux","arch":"x64","variants":"baseline modern"}
-          ]') }}
-    runs-on: ${{ matrix.os }}
+        include:
+          - platform: linux
+            arch: x64
+            variants: "baseline modern"
+            runner: namespace-profile-default
+          - platform: darwin
+            arch: arm64
+            runner: namespace-profile-tahoe
+    runs-on: ${{ matrix.runner }}
     steps:
       - uses: actions/checkout@v4
         with:
           lfs: true
       - uses: dtolnay/rust-toolchain@nightly
-        with:
-          targets: ${{ matrix.target }}
       - uses: Swatinem/rust-cache@v2
-        with:
-          key: ${{ matrix.target }}
       - uses: oven-sh/setup-bun@v2
         with:
           bun-version: "1.3"
-      - name: Install cross-compilation toolchain
-        if: matrix.target == 'aarch64-unknown-linux-gnu'
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y gcc-aarch64-linux-gnu
       - name: Build native addon(s)
         env:
-          CROSS_TARGET: ${{ matrix.target }}
           TARGET_PLATFORM: ${{ matrix.platform }}
           TARGET_ARCH: ${{ matrix.arch }}
-          CARGO_TARGET_AARCH64_UNKNOWN_LINUX_GNU_LINKER: aarch64-linux-gnu-gcc
         shell: bash
         run: |
           VARIANTS="${{ matrix.variants }}"
@@ -95,8 +77,9 @@ jobs:
           path: packages/natives/native/pi_natives.${{ matrix.platform }}-${{ matrix.arch }}*.node
           if-no-files-found: error
 
+
   test:
-    runs-on: ubuntu-22.04
+    runs-on: namespace-profile-default
     env:
       RUSTFLAGS: -C target-cpu=x86-64-v3
     steps:
@@ -127,8 +110,38 @@ jobs:
           bun packages/coding-agent/src/cli.ts --help
           bun packages/coding-agent/src/cli.ts stats --help
 
+  contracts:
+    runs-on: namespace-profile-default
+    env:
+      RUSTFLAGS: -C target-cpu=x86-64-v3
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          lfs: true
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: "1.3"
+      - name: Cache bun dependencies
+        uses: actions/cache@v4
+        with:
+          path: ~/.bun/install/cache
+          key: bun-${{ runner.os }}-${{ hashFiles('**/bun.lock') }}
+      - name: Install system deps
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libcairo2-dev libpango1.0-dev libjpeg-dev libgif-dev librsvg2-dev fd-find ripgrep imagemagick
+          sudo ln -s $(which fdfind) /usr/local/bin/fd
+          sudo ln -sf /usr/bin/convert /usr/local/bin/magick
+      - run: bun install --frozen-lockfile
+      - run: bun --cwd=packages/natives run build:native
+      - name: Run contract suites
+        run: |
+          bun --cwd=packages/coding-agent test test/rpc-compatibility-contract.test.ts
+          bun --cwd=packages/coding-agent test test/memory-contract.test.ts
+
+
   install_methods:
-    runs-on: ubuntu-22.04
+    runs-on: namespace-profile-default
     env:
       RUSTFLAGS: -C target-cpu=x86-64-v3
     steps:
@@ -153,99 +166,3 @@ jobs:
       - run: bun install --frozen-lockfile
       - name: Install method smoke tests
         run: bash scripts/install-tests/run-ci.sh
-
-  release:
-    if: startsWith(github.ref, 'refs/tags/v')
-    needs: [rust, native, test, install_methods]
-    runs-on: ubuntu-22.04
-    permissions:
-      contents: write
-      id-token: write
-    steps:
-      - uses: actions/checkout@v4
-        with:
-          lfs: true
-      - uses: oven-sh/setup-bun@v2
-        with:
-          bun-version: "1.3"
-      - uses: actions/setup-node@v4
-        with:
-          node-version: "24"
-          registry-url: "https://registry.npmjs.org"
-      - name: Cache bun dependencies
-        uses: actions/cache@v4
-        with:
-          path: ~/.bun/install/cache
-          key: bun-${{ runner.os }}-${{ hashFiles('**/bun.lock') }}
-      - run: bun install --frozen-lockfile
-      - name: Download native addons
-        uses: actions/download-artifact@v4
-        with:
-          pattern: pi-natives-*
-          path: packages/natives/native
-          merge-multiple: true
-      - name: Verify native addons
-        run: |
-          echo "Native addons downloaded:"
-          ls -la packages/natives/native/
-          echo ""
-          echo "Expected addons: linux-x64-modern, linux-x64-baseline, linux-arm64, darwin-x64-modern, darwin-x64-baseline, darwin-arm64, win32-x64-modern, win32-x64-baseline"
-          for plat in linux-x64-modern linux-x64-baseline linux-arm64 darwin-x64-modern darwin-x64-baseline darwin-arm64 win32-x64-modern win32-x64-baseline; do
-            if [ -f "packages/natives/native/pi_natives.${plat}.node" ]; then
-              echo "✓ pi_natives.${plat}.node"
-            else
-              echo "✗ pi_natives.${plat}.node MISSING"
-              exit 1
-            fi
-          done
-
-      - name: Build binaries
-        run: |
-          bun --cwd=packages/stats scripts/generate-client-bundle.ts
-          mkdir -p packages/coding-agent/binaries
-          ENTRYPOINT="./packages/coding-agent/src/cli.ts"
-          DEFINES="--define PI_COMPILED=true --root ."
-          build_binary() {
-            PLATFORM="$1"
-            ARCH="$2"
-            TARGET="$3"
-            OUTFILE="$4"
-            TARGET_PLATFORM="$PLATFORM" TARGET_ARCH="$ARCH" bun --cwd=packages/natives run embed:native
-            bun build --compile $DEFINES --target="$TARGET" "$ENTRYPOINT" --outfile "$OUTFILE"
-          }
-          build_binary darwin arm64 bun-darwin-arm64 packages/coding-agent/binaries/omp-darwin-arm64
-          build_binary darwin x64 bun-darwin-x64 packages/coding-agent/binaries/omp-darwin-x64
-          build_binary linux x64 bun-linux-x64-modern packages/coding-agent/binaries/omp-linux-x64
-          build_binary linux arm64 bun-linux-arm64 packages/coding-agent/binaries/omp-linux-arm64
-          build_binary win32 x64 bun-windows-x64-modern packages/coding-agent/binaries/omp-windows-x64.exe
-          bun --cwd=packages/natives run embed:native --reset
-          bun --cwd=packages/stats scripts/generate-client-bundle.ts --reset
-      - name: Stage native addons for release
-        run: cp packages/natives/native/*.node packages/coding-agent/binaries/
-      - name: Create GitHub Release
-        uses: softprops/action-gh-release@v2
-        with:
-          files: packages/coding-agent/binaries/*
-          generate_release_notes: true
-      - name: Publish to npm
-        if: ${{ !inputs.skip_npm }}
-        env:
-          NPM_CONFIG_TOKEN: ${{ secrets.NPM_TOKEN }}
-        run: |
-          for pkg in packages/*/; do
-            pkg_name=$(basename "$pkg")
-            # Skip private packages
-            if jq -e '.private == true' "$pkg/package.json" > /dev/null 2>&1; then
-              echo "Skipping $pkg_name (private)"
-              continue
-            fi
-            echo "Publishing $pkg_name..."
-            output=$(cd "$pkg" && bun publish --access public 2>&1) && echo "$output" && continue
-            echo "$output"
-            if echo "$output" | grep -q "previously published\|cannot publish over\|You cannot publish over"; then
-              echo "Already published, skipping"
-            else
-              echo "Failed to publish $pkg_name"
-              exit 1
-            fi
-          done
