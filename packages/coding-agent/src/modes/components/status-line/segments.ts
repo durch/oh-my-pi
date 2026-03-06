@@ -2,6 +2,7 @@ import * as os from "node:os";
 import { ThinkingLevel } from "@oh-my-pi/pi-agent-core";
 import { TERMINAL } from "@oh-my-pi/pi-tui";
 import { formatDuration, formatNumber, getProjectDir } from "@oh-my-pi/pi-utils";
+import { getContextManagerMode } from "../../../context-manager";
 import { theme } from "../../../modes/theme/theme";
 import { shortenPath } from "../../../tools/render-utils";
 import { getContextUsageLevel, getContextUsageThemeColor } from "./context-thresholds";
@@ -346,6 +347,20 @@ const cacheWriteSegment: StatusLineSegment = {
 	},
 };
 
+const contextMgrSegment: StatusLineSegment = {
+	id: "context_mgr",
+	render(ctx) {
+		const mode = getContextManagerMode(ctx.session.settings);
+		// Only show when not in legacy mode (legacy is the default, no noise)
+		if (mode === "legacy") {
+			return { content: "", visible: false };
+		}
+		const label = mode === "shadow" ? "ctx:shadow" : `ctx:${mode}`;
+		const color = mode === "shadow" ? "warning" : "accent";
+		return { content: theme.fg(color, label), visible: true };
+	},
+};
+
 // ═══════════════════════════════════════════════════════════════════════════
 // Segment Registry
 // ═══════════════════════════════════════════════════════════════════════════
@@ -371,6 +386,7 @@ export const SEGMENTS: Record<StatusLineSegmentId, StatusLineSegment> = {
 	hostname: hostnameSegment,
 	cache_read: cacheReadSegment,
 	cache_write: cacheWriteSegment,
+	context_mgr: contextMgrSegment,
 };
 
 export function renderSegment(id: StatusLineSegmentId, ctx: SegmentContext): RenderedSegment {
