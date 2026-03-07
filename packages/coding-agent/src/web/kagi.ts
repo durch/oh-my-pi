@@ -113,7 +113,7 @@ export async function summarizeUrlWithKagi(url: string, options: KagiSummarizeOp
 export async function searchWithKagi(query: string, options: KagiSearchOptions = {}): Promise<KagiSearchResult> {
 	const apiKey = await findKagiApiKey();
 	if (!apiKey) {
-		throw new KagiApiError("Kagi credentials not found. Set KAGI_API_KEY or login with 'omp /login kagi'.");
+		throw new KagiApiError("Kagi credentials not found. Set KAGI_API_KEY or login with 'oh-omp /login kagi'.");
 	}
 
 	const requestUrl = new URL(KAGI_SEARCH_URL);

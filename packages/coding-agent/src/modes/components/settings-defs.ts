@@ -70,6 +70,11 @@ type OptionProvider = (() => OptionList) | OptionList;
 
 const OPTION_PROVIDERS: Partial<Record<SettingPath, OptionProvider>> = {
 	// Context maintenance strategy
+	"contextManager.mode": [
+		{ value: "legacy", label: "Legacy", description: "Current behavior: legacy context management is active" },
+		{ value: "shadow", label: "Shadow", description: "Legacy stays active while assembler observes" },
+		{ value: "assembler", label: "Assembler", description: "Assembler-managed context with legacy paths disabled" },
+	],
 	"compaction.strategy": [
 		{ value: "context-full", label: "Context-full", description: "Summarize in-place and keep the current session" },
 		{ value: "handoff", label: "Handoff", description: "Generate handoff and continue in a new session" },

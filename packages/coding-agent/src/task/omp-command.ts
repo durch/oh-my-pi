@@ -8,7 +8,7 @@ interface OmpCommand {
 	shell: boolean;
 }
 
-const DEFAULT_CMD = process.platform === "win32" ? "omp.cmd" : "omp";
+const DEFAULT_CMD = process.platform === "win32" ? "oh-omp.cmd" : "oh-omp";
 const DEFAULT_SHELL = process.platform === "win32";
 
 export function resolveOmpCommand(): OmpCommand {

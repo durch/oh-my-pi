@@ -66,7 +66,9 @@ export async function searchSynthetic(params: {
 }): Promise<SearchResponse> {
 	const apiKey = await findApiKey();
 	if (!apiKey) {
-		throw new Error("Synthetic credentials not found. Set SYNTHETIC_API_KEY or login with 'omp /login synthetic'.");
+		throw new Error(
+			"Synthetic credentials not found. Set SYNTHETIC_API_KEY or login with 'oh-omp /login synthetic'.",
+		);
 	}
 
 	const data = await callSyntheticSearch(apiKey, params.query, params.signal);

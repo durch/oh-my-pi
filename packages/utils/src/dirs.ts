@@ -1,7 +1,7 @@
 /**
  * Centralized path helpers for omp config directories.
  *
- * Uses PI_CONFIG_DIR (default ".omp") for the config root and
+ * Uses PI_CONFIG_DIR (default ".oh-omp") for the config root and
  * PI_CODING_AGENT_DIR to override the agent directory.
  */
 
@@ -10,11 +10,11 @@ import * as os from "node:os";
 import * as path from "node:path";
 import { engines, version } from "../package.json" with { type: "json" };
 
-/** App name (e.g. "omp") */
-export const APP_NAME: string = "omp";
+/** App name (e.g. "oh-omp") */
+export const APP_NAME: string = "oh-omp";
 
-/** Config directory name (e.g. ".omp") */
-export const CONFIG_DIR_NAME: string = ".omp";
+/** Config directory name (e.g. ".oh-omp") */
+export const CONFIG_DIR_NAME: string = ".oh-omp";
 
 /** Version (e.g. "1.0.0") */
 export const VERSION: string = version;
@@ -54,7 +54,7 @@ export function setProjectDir(dir: string): void {
 	process.chdir(projectDir);
 }
 
-/** Get the config root directory (~/.omp). */
+/** Get the config root directory (~/.oh-omp). */
 export function getConfigRootDir(): string {
 	return path.join(os.homedir(), process.env.PI_CONFIG_DIR || CONFIG_DIR_NAME);
 }
@@ -68,12 +68,12 @@ export function setAgentDir(dir: string): void {
 	process.env.PI_CODING_AGENT_DIR = dir;
 }
 
-/** Get the agent config directory (~/.omp/agent). */
+/** Get the agent config directory (~/.oh-omp/agent). */
 export function getAgentDir(): string {
 	return agentDir;
 }
 
-/** Get the project-local config directory (.omp). */
+/** Get the project-local config directory (.oh-omp). */
 export function getProjectAgentDir(cwd: string = getProjectDir()): string {
 	return path.join(cwd, CONFIG_DIR_NAME);
 }

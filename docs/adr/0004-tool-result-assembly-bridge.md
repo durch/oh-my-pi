@@ -1,31 +1,40 @@
-# ADR 0004: Tool-Result-to-Memory Bridge for Context Assembly
+# ADR 0004: Tool-Result-to-Memory Bridge
 
 - Status: Proposed
-- Date: 2026-03-06
+- Date: 2026-03-06 (revised 2026-03-07)
 - Decision makers: Harness maintainers
-- Depends on: ADR 0003, Issue #3 (assembler kernel), Issue #2 (shadow telemetry)
+- Depends on: ADR 0003 (tiered memory + assembler)
+- Revision note: Corrected scope. Previous version conflated the bridge (an input source) with the assembler (the context manager). This revision re-grounds the bridge as a component within ADR 0003's assembly model.
 
 ## Context
 
-ADR 0003 introduced tiered memory (LTM/STM/WM) with a Locator Map and a local assembler kernel.
-Issue #3 (PR #9) implemented the kernel: it scores, ranks, and hydrates `MemoryLocatorEntry[]` into a `WorkingContextPacketV1` under budget constraints.
-Issue #2 (PR #10) implemented shadow telemetry: it observes `AgentSessionEvent` streams and writes structured NDJSON traces.
+ADR 0003 defines a tiered memory architecture (LTM/STM/WM) with a Locator Map and a per-turn assembly policy. That policy — initialize WM, hydrate via locator map, rank, inject bounded context, distill, promote — describes a **context manager** that controls what the LLM sees each turn.
 
-The kernel has a pluggable `LocatorRetriever` (currently a stub) and consumes a `MemoryContractV1`.
-But nothing populates the contract from actual tool execution.
-The gap: **tool results are the primary source of context, but no code converts them into locator entries, STM records, or retrievable artifacts**.
+The assembler's job (per ADR 0003) is to compose the full context window from multiple sources under a token budget. This follows the Memex Context Space design:
 
-This ADR designs the bridge between tool execution events and the assembler kernel's input contract.
+```
+Total budget (configurable)
+├── Conversation history (bounded, most recent N messages)
+├── Hydrated locator fragments (tool results, file reads)
+├── STM summary (active paths, symbols, loops)
+├── Session intent / objective
+└── Distilled learnings (future: LTM)
+```
 
-### Problem Framing
+The assembler decides what enters the context window and what doesn't. The conversation itself is bounded — not passed through unchanged.
 
-This is an **assembly** problem, not a storage problem.
-The data is already stored (session JSONL + artifact files).
-The problem is what gets assembled into context each turn, and in what form.
+**This ADR addresses one input to that assembly**: how tool execution events feed the Locator Map. Tool results are the primary source of context in a coding agent — a single `bash` execution can produce 50K tokens, a `grep` that answered a one-off question wastes tokens every subsequent turn. The bridge converts tool events into locator entries that the assembler can score, rank, and selectively hydrate.
 
-Tool results dominate context consumption. A single `bash` execution can produce 50K tokens.
-A `grep` result that answered a one-off question wastes tokens every subsequent turn.
-Current mitigation (pruning at `protectTokens: 40_000`) is a blunt instrument: it doesn't know tool semantics, doesn't distinguish current-turn relevance from historical noise, and can't recover pruned content when it becomes relevant again.
+### What the Bridge Is
+
+An **observer** that watches tool execution events and produces `MemoryLocatorEntry` records + STM state. It is one input to the assembler, alongside conversation history, session intent, and eventually LTM.
+
+### What the Bridge Is Not
+
+- Not the context manager. The assembler (ADR 0003) manages the context window.
+- Not responsible for conversation bounding. The assembler decides how many conversation messages fit the budget.
+- Not responsible for prompt injection. The assembler composes and injects the final context.
+- Not a replacement for pruning. The assembler replaces pruning by managing the full context window. The bridge just provides scored material for it to draw from.
 
 ### Half-Life Observation
 
@@ -35,18 +44,20 @@ Tool results have vastly different useful lifetimes:
 |---|---|---|---|
 | Lookup | grep, find, ast_grep, lsp(hover) | 1-2 turns | Address only |
 | Read | read, fetch | 3-5 turns | Stale if path edited |
-| Mutation | edit, write, bash(build) | Current turn only | Confirmation line |
+| Mutation | edit, write, ast_edit, notebook | Current turn only | Confirmation line |
 | Execution | bash, python, task | 3-15 turns | Error=high, success=low |
-| Subagent | task(completed) | Session-long | Summary only |
+| Subagent | task (completed) | Session-long | Summary only |
+
+The bridge encodes these policies as freshness metadata on locator entries. The assembler uses freshness during scoring and hydration — stale entries are dropped, fresh entries compete for budget.
 
 ## Decision
 
-Introduce a **tool-result-to-memory bridge** module that:
+Introduce a **tool-result-to-memory bridge** that:
 
 1. Observes tool execution events (same `AgentSessionEvent` surface as telemetry).
 2. Generates `MemoryLocatorEntry` records with tool-specific metadata.
 3. Maintains `ShortTermMemoryRecord` state from tool outcomes.
-4. Implements a real `LocatorRetriever` that reads artifact files.
+4. Implements a `LocatorRetriever` that reads artifact files and re-reads source files.
 
 ### Architecture
 
@@ -63,12 +74,32 @@ Tool Execution Events (tool_execution_start/end)
 │  - trackPaths()      │  → file-edit invalidation tracking
 └──────────┬──────────┘
            │
-           ▼
-    MemoryContractV1     ← consumed by assembler kernel (issue #3)
+           ▼ (one input among several)
+    MemoryContractV1
            │
            ▼
- WorkingContextPacketV1  ← injected into prompt (issue #4)
+┌─────────────────────────────────────────────┐
+│          Assembler (ADR 0003)               │
+│                                             │
+│  Inputs:                                    │
+│  - Conversation history (bounded by budget) │
+│  - Hydrated locator entries (from bridge)   │
+│  - STM summary (from bridge)               │
+│  - Session intent / objective               │
+│  - LTM (future)                             │
+│                                             │
+│  Output: composed context window            │
+│  - transformContext() manages messages       │
+│  - Replaces legacy pruning + compaction     │
+└─────────────────────────────────────────────┘
 ```
+
+The bridge feeds the contract. The assembler consumes the contract alongside other sources to compose the bounded context window. The assembler — not the bridge — is responsible for:
+
+- Bounding conversation history to fit within its budget allocation
+- Replacing previous-turn tool_result messages with hydrated locator fragments
+- Removing stale messages entirely
+- Composing the final `AgentMessage[]` returned from `transformContext()`
 
 ### Module: `packages/coding-agent/src/context/bridge/`
 
@@ -76,7 +107,7 @@ Four files:
 
 - `bridge.ts` — `ToolResultBridge` class, event observer, state management
 - `classify.ts` — tool result classification and freshness policy
-- `retriever.ts` — real `LocatorRetriever` implementation
+- `retriever.ts` — `LocatorRetriever` implementation (artifact read + file re-read)
 - `types.ts` — bridge-specific types
 
 ### 1. Tool Result Classification
@@ -143,7 +174,7 @@ On `tool_execution_end`, the bridge:
 
 ### 3. STM Population
 
-The bridge maintains a running `ShortTermMemoryRecord` per objective:
+The bridge maintains a running `ShortTermMemoryRecord`:
 
 - `touchedPaths`: accumulated from tool args/results via `extractPaths()`
 - `touchedSymbols`: accumulated from `lsp` tool calls (symbol arg) and `ast_grep` patterns
@@ -152,9 +183,9 @@ The bridge maintains a running `ShortTermMemoryRecord` per objective:
 
 This reuses the exact same path extraction logic already in telemetry's `extractPaths()` — extract it to a shared utility.
 
-### 4. Real Locator Retriever
+### 4. Locator Retriever
 
-Replace `stubRetriever` with `artifactRetriever`:
+Replace `stubRetriever` with a composite retriever:
 
 ```typescript
 const artifactRetriever: LocatorRetriever = async (entry) => {
@@ -168,33 +199,32 @@ const artifactRetriever: LocatorRetriever = async (entry) => {
 };
 ```
 
-This is intentionally simple. The artifact files already exist (the current `ArtifactManager` saves truncated outputs). The retriever reads them back.
-
 For non-artifact-backed entries (e.g., `read` results that weren't truncated), the recipe uses `method: "read"` with `params: { path }` and the retriever re-reads the file. This naturally handles freshness — a re-read returns current content, not stale content.
 
-### 5. Current-Turn vs. Historical Turns
+### 5. Relationship to Conversation Management
 
-**Critical invariant**: current-turn tool results stay as full conversation messages. The bridge only affects how *previous* turns' tool results appear in assembled context.
+The bridge generates locator entries. It does **not** manage conversation messages.
 
-The assembly strategy:
+Conversation management is the assembler's responsibility (ADR 0003). The assembler's `transformContext()` callback receives the full `AgentMessage[]` and returns a bounded, composed context window:
 
-| Turn age | Representation |
-|---|---|
-| Current turn | Full `tool_result` message (conversation fidelity) |
-| Previous turn (within TTL) | Locator entry → hydrated by kernel under budget |
-| Stale (past TTL or invalidated) | Locator entry → dropped by kernel, reported in `drops[]` |
+- **Current-turn tool results**: kept as full `tool_result` messages (conversation fidelity for the LLM's tool_use/tool_result pairing).
+- **Previous-turn tool results**: replaced by the assembler with hydrated locator fragments (or dropped if stale). The bridge provides the material; the assembler does the replacement.
+- **Conversation history**: bounded by the assembler to fit within its budget allocation.
 
-This means the bridge does not interfere with the LLM's tool_use/tool_result pairing for the current turn. It only provides the kernel with material for assembling historical context.
+This division of responsibility means:
+- The bridge is stateless with respect to messages — it only observes events and produces locator entries.
+- The assembler is the single authority on what enters the context window.
+- The bridge can operate in shadow mode (observe-only) without any message manipulation.
 
 ### 6. Integration with Existing Systems
 
-**ArtifactManager**: already stores truncated outputs. The bridge reuses this — no new storage layer. For results that weren't truncated (small outputs), the bridge can optionally store a full copy, or rely on re-execution via the recipe.
+**ArtifactManager**: already stores truncated outputs. The bridge reuses this — no new storage layer.
 
-**OutputMeta**: already carries `source`, `truncation`, `diagnostics`. The bridge reads these to populate locator entries (e.g., `source.path` → locator `where`, `truncation.artifactId` → retriever params).
+**OutputMeta**: already carries `source`, `truncation`, `diagnostics`. The bridge reads these to populate locator entries.
 
-**Telemetry (PR #10)**: operates in parallel. Telemetry observes and traces; the bridge observes and populates the contract. Both subscribe to `AgentSessionEvent` independently. No coordination needed — they're both read-only observers of the same event stream.
+**Telemetry**: operates in parallel. Both subscribe to `AgentSessionEvent` independently. No coordination needed.
 
-**Pruning**: in assembler mode, pruning is replaced by the kernel's budget-aware hydration. The bridge does not interact with `pruneToolOutputs()`. In legacy/shadow mode, pruning continues unchanged.
+**Legacy pruning/compaction**: replaced by the assembler (ADR 0003), not by the bridge. In assembler mode, the assembler's `transformContext()` replaces pruning by managing what messages enter the context window. The bridge is uninvolved in this replacement.
 
 ### 7. File Layout
 
@@ -224,17 +254,17 @@ if (isAssemblerMode(settings) || isShadowMode(settings)) {
 }
 ```
 
-In shadow mode, the bridge populates the contract but the contract is not used for prompt assembly (observe-only). This allows validation against legacy context during dogfooding (#6).
+In shadow mode, the bridge populates the contract but the contract is not used for prompt assembly (observe-only).
 
 ## Consequences
 
 ### Positive
 
-- Replaces blunt pruning with semantic, per-tool-category retention.
-- Locator entries enable the kernel to re-hydrate context that was previously evicted when it becomes relevant again.
+- Provides the assembler with scored, classified tool-result context to draw from.
+- Locator entries enable budget-aware re-hydration of previously evicted content.
 - File-edit invalidation prevents stale read results from polluting context.
-- Everything built feeds directly into ADR 0003's assembly model: locator entries are first-class, budget-aware, inspectable.
 - Artifact storage is reused — no new persistence layer.
+- Clean separation: bridge observes and produces locator entries; assembler manages the context window.
 
 ### Negative
 
@@ -244,27 +274,32 @@ In shadow mode, the bridge populates the contract but the contract is not used f
 
 ## Non-Goals
 
+- Not the context manager. The assembler (ADR 0003) manages what enters the context window.
 - Not changing the tool executor interface. Tools don't need to know about the bridge.
 - Not replacing the artifact storage system.
-- Not implementing LTM promotion (that's future work after dogfooding).
-- Not wiring prompt injection (that's issue #4).
+- Not implementing LTM promotion (future work after dogfooding).
+- Not managing conversation history or message bounding (assembler's job).
+
+## What Must Still Be Built (in the Assembler, per ADR 0003)
+
+The bridge is one input. The following assembler capabilities remain unimplemented and are required for the system described in ADR 0003 to function as a context manager:
+
+1. **Conversation bounding** — `transformContext()` must select recent messages within a budget allocation, not pass all messages through.
+2. **Previous-turn replacement** — `transformContext()` must identify previous-turn `tool_result` messages and replace them with hydrated locator fragments (or drop stale ones entirely).
+3. **Working memory rebuild** — WM must be rebuilt each turn from STM state, session objective, and budget.
+4. **STM distillation** — accumulated STM (touchedPaths, symbols, loops) must be distilled, not grown unbounded.
+5. **Budget calibration** — the budget must reflect actual context window management (conversation + assembled context), not reserve tokens for unpopulated phantom fields.
+
+These are assembler responsibilities. They belong to the implementation of ADR 0003's assembly policy, not to this bridge. But they must exist for the bridge's output to serve its intended purpose.
 
 ## Issue Dependency
-
-This ADR describes new work that sits between #3 and #4:
 
 ```
 #1 (done) → #2 (telemetry, PR open)
          → #3 (kernel, PR open)
-         → THIS (bridge) → #4 (injection) → #5 → #6 → #7
+         → THIS (bridge) ──┐
+                            ├──→ Assembler (ADR 0003 assembly policy) → #5 → #6 → #7
+         → #4 (injection) ──┘
 ```
 
-The bridge unblocks #4 because the injection path needs a populated `MemoryContractV1` and a real retriever, not the empty contract + stub retriever from #3.
-
-## Estimated Scope
-
-- 4 new files in `src/context/bridge/` (~400-600 lines total)
-- 1 extracted shared utility (~50 lines)
-- Light touch to `sdk.ts` for wiring (~10 lines)
-- No changes to tool executors
-- Tests: classification map coverage, locator generation from tool events, STM accumulation, retriever reads, freshness invalidation (~300-500 lines)
+The bridge provides input. The assembler consumes it alongside other sources to compose the context window. Both must exist for the system to function as a context manager rather than a context decorator.

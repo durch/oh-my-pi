@@ -241,7 +241,7 @@ export async function searchAnthropic(params: AnthropicSearchParams): Promise<Se
 	const auth = await findAnthropicAuth();
 	if (!auth) {
 		throw new Error(
-			"No Anthropic credentials found. Set ANTHROPIC_API_KEY or configure OAuth in ~/.omp/agent/agent.db",
+			"No Anthropic credentials found. Set ANTHROPIC_API_KEY or configure OAuth in ~/.oh-omp/agent/agent.db",
 		);
 	}
 

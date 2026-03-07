@@ -1366,6 +1366,9 @@ export async function createAgentSession(options: CreateAgentSessionOptions = {}
 	// Pre-create bridge for assembler/shadow modes so it's available to transformContext.
 	// Event subscription is wired after session creation below.
 	const assemblerBridge = isShadowMode(settings) || isAssemblerActive(settings) ? new ToolResultBridge() : undefined;
+	const assemblerRetriever = assemblerBridge
+		? assemblerBridge.createRetriever({ getPath: id => sessionManager.getArtifactPath(id) })
+		: undefined;
 
 	// Build per-turn context transformer.
 	// In assembler mode, assembled context fragments are injected as a developer message.
@@ -1387,7 +1390,14 @@ export async function createAgentSession(options: CreateAgentSessionOptions = {}
 							activeSymbols: stm?.touchedSymbols ?? [],
 							unresolvedLoops: stm?.unresolvedLoops ?? [],
 						};
-						const packet = await assemble(assemblerBridge.contract, turn);
+						const packet = await assemble(assemblerBridge.contract, turn, { retriever: assemblerRetriever });
+						logger.debug("assembler:transform", {
+							locators: assemblerBridge.contract.locatorMap.length,
+							fragments: packet.fragments.length,
+							dropped: packet.dropped.length,
+							drops: packet.dropped.map(d => `${d.id}:${d.reason}`),
+							usage: packet.usage,
+						});
 						const text = formatAssembledContext(packet);
 						if (text) {
 							const contextMessage: AgentMessage = {

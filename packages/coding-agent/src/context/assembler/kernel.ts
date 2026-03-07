@@ -92,13 +92,13 @@ export async function assemble(
 	// Cap at maxCandidates
 	const capped = ranked.slice(0, maxCandidates);
 
-	// Build invalidation tags from short-term memory touched paths
+	// Invalidation tags: the bridge already evicts stale locators in real-time
+	// when mutations occur (#trackMutation → #invalidateByPaths). Building
+	// invalidation tags from STM touchedPaths would self-invalidate every
+	// locator (since a read/grep of path X adds X to both the locator's
+	// invalidatedBy and the STM's touchedPaths). Pass an empty set here;
+	// the bridge's eager invalidation is the authoritative mechanism.
 	const invalidationTags = new Set<string>();
-	for (const stm of contract.shortTerm) {
-		for (const path of stm.touchedPaths) {
-			invalidationTags.add(path);
-		}
-	}
 
 	// Hydrate within budget
 	const tracker = createBudgetTracker(Math.max(0, availableTokens), budget.maxLatencyMs);

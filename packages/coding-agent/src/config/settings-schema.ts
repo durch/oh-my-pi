@@ -331,7 +331,7 @@ export const SETTINGS_SCHEMA = {
 	"contextManager.mode": {
 		type: "enum",
 		values: ["legacy", "shadow", "assembler"] as const,
-		default: "legacy",
+		default: "assembler",
 		ui: {
 			tab: "agent",
 			label: "Context manager",
@@ -355,7 +355,7 @@ export const SETTINGS_SCHEMA = {
 	// ─────────────────────────────────────────────────────────────────────────
 	"compaction.enabled": {
 		type: "boolean",
-		default: true,
+		default: false,
 		ui: {
 			tab: "agent",
 			label: "Auto-compact",
