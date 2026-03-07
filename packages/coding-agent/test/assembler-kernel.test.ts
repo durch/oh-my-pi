@@ -748,7 +748,6 @@ describe("assemble", () => {
 	});
 });
 
-
 // ═══════════════════════════════════════════════════════════════════════════
 // Budget derivation
 // ═══════════════════════════════════════════════════════════════════════════
@@ -886,17 +885,19 @@ describe("estimateMessageTokens", () => {
 
 	test("estimates array content with text blocks", () => {
 		const messages = [
-			{ content: [{ type: "text", text: "Hello" }, { type: "text", text: "World" }] },
+			{
+				content: [
+					{ type: "text", text: "Hello" },
+					{ type: "text", text: "World" },
+				],
+			},
 		];
 		// 5 + 5 = 10 chars -> 3 tokens (ceil(10/4))
 		expect(estimateMessageTokens(messages)).toBe(3);
 	});
 
 	test("handles mixed content types", () => {
-		const messages = [
-			{ content: "simple string" },
-			{ content: [{ type: "text", text: "in array" }] },
-		];
+		const messages = [{ content: "simple string" }, { content: [{ type: "text", text: "in array" }] }];
 		// 13 + 8 = 21 chars -> 6 tokens
 		expect(estimateMessageTokens(messages)).toBe(6);
 	});
@@ -986,9 +987,7 @@ describe("assemble budget priority", () => {
 	test("derived budget is used for hydration token limit", async () => {
 		// Create a locator that needs ~500 tokens to hydrate
 		const contract = makeContract({
-			locatorMap: [
-				makeLocator({ key: "big", cost: { estimatedTokens: 500, estimatedLatencyMs: 10 } }),
-			],
+			locatorMap: [makeLocator({ key: "big", cost: { estimatedTokens: 500, estimatedLatencyMs: 10 } })],
 		});
 
 		// Budget with only 100 tokens available -> should drop as token_budget

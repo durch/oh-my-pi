@@ -91,7 +91,9 @@ export function deriveBudget(input: BudgetDerivationInput): MemoryAssemblyBudget
  * then applies the chars/4 heuristic. Conservative: real serialization adds
  * envelope overhead, so this slightly under-estimates.
  */
-export function estimateToolDefinitionTokens(tools: Array<{ name: string; description?: string; parameters?: unknown }>): number {
+export function estimateToolDefinitionTokens(
+	tools: Array<{ name: string; description?: string; parameters?: unknown }>,
+): number {
 	let chars = 0;
 	for (const tool of tools) {
 		chars += tool.name.length;
