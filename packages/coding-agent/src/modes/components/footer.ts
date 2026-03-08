@@ -19,7 +19,6 @@ export class FooterComponent implements Component {
 
 	constructor(private readonly session: AgentSession) {}
 
-
 	/**
 	 * Set extension status text to display in the footer.
 	 * Text is sanitized (newlines/tabs replaced with spaces) and truncated to terminal width.

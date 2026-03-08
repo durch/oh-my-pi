@@ -83,7 +83,6 @@ export class StatusLineComponent implements Component {
 		this.#settings = settings;
 	}
 
-
 	setSubagentCount(count: number): void {
 		this.#subagentCount = count;
 	}
