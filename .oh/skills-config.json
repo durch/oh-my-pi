@@ -1,0 +1,7 @@
+{
+  "projectSkills": ["aim", "problem-space", "problem-statement", "solution-space", "execute", "review", "dissent", "salvage"],
+  "disabledSkills": ["ship"],
+  "phaseOverrides": {
+    "execute": ["dissent"]
+  }
+}
