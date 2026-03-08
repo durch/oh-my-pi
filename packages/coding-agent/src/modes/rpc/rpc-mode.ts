@@ -488,7 +488,6 @@ export async function runRpcMode(session: AgentSession): Promise<never> {
 					sessionFile: session.sessionFile,
 					sessionId: session.sessionId,
 					sessionName: session.sessionName,
-					autoCompactionEnabled: session.autoCompactionEnabled,
 					messageCount: session.messages.length,
 					queuedMessageCount: session.queuedMessageCount,
 				};
@@ -565,11 +564,6 @@ export async function runRpcMode(session: AgentSession): Promise<never> {
 			case "compact": {
 				const result = await session.compact(command.customInstructions);
 				return success(id, "compact", result);
-			}
-
-			case "set_auto_compaction": {
-				session.setAutoCompactionEnabled(command.enabled);
-				return success(id, "set_auto_compaction");
 			}
 
 			// =================================================================

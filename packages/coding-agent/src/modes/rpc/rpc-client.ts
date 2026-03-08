@@ -320,13 +320,6 @@ export class RpcClient {
 	}
 
 	/**
-	 * Set auto-compaction enabled/disabled.
-	 */
-	async setAutoCompaction(enabled: boolean): Promise<void> {
-		await this.#send({ type: "set_auto_compaction", enabled });
-	}
-
-	/**
 	 * Set auto-retry enabled/disabled.
 	 */
 	async setAutoRetry(enabled: boolean): Promise<void> {

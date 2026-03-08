@@ -15,14 +15,9 @@ export class FooterComponent implements Component {
 	#cachedBranch: string | null | undefined = undefined; // undefined = not checked yet, null = not in git repo, string = branch name
 	#gitWatcher: fs.FSWatcher | null = null;
 	#onBranchChange: (() => void) | null = null;
-	#autoCompactEnabled: boolean = true;
 	#extensionStatuses: Map<string, string> = new Map();
 
 	constructor(private readonly session: AgentSession) {}
-
-	setAutoCompactEnabled(enabled: boolean): void {
-		this.#autoCompactEnabled = enabled;
-	}
 
 	/**
 	 * Set extension status text to display in the footer.
@@ -194,11 +189,10 @@ export class FooterComponent implements Component {
 
 		// Colorize context percentage based on usage
 		let contextPercentStr: string;
-		const autoIndicator = this.#autoCompactEnabled ? " (auto)" : "";
 		const contextPercentDisplay =
 			contextPercent === "?"
-				? `?/${formatNumber(contextWindow)}${autoIndicator}`
-				: `${contextPercent}%/${formatNumber(contextWindow)}${autoIndicator}`;
+				? `?/${formatNumber(contextWindow)}`
+				: `${contextPercent}%/${formatNumber(contextWindow)}`;
 		if (contextUsage?.percent !== null && contextUsage?.percent !== undefined) {
 			const color = getContextUsageThemeColor(getContextUsageLevel(contextPercentValue, contextWindow));
 			contextPercentStr =

@@ -8,7 +8,7 @@ import { THINKING_EFFORTS } from "@oh-my-pi/pi-ai";
  * - Optional UI metadata (label, description, tab)
  *
  * The Settings singleton provides type-safe path-based access:
- *   settings.get("compaction.enabled")  // => boolean
+ *   settings.get("compaction.reserveTokens")  // => number
  *   settings.set("theme.dark", "titanium")  // sync, saves in background
  */
 
@@ -353,48 +353,8 @@ export const SETTINGS_SCHEMA = {
 	// ─────────────────────────────────────────────────────────────────────────
 	// Compaction settings
 	// ─────────────────────────────────────────────────────────────────────────
-	"compaction.enabled": {
-		type: "boolean",
-		default: false,
-		ui: {
-			tab: "agent",
-			label: "Auto-compact",
-			description: "Automatically compact context when it gets too large",
-		},
-	},
-	"compaction.strategy": {
-		type: "enum",
-		values: ["context-full", "handoff", "off"] as const,
-		default: "context-full",
-		ui: {
-			tab: "agent",
-			label: "Context-full strategy",
-			description: "Choose in-place context-full maintenance, auto-handoff, or disable auto maintenance (off)",
-			submenu: true,
-		},
-	},
-	"compaction.thresholdPercent": {
-		type: "number",
-		default: -1,
-		ui: {
-			tab: "agent",
-			label: "Context threshold",
-			description: "Percent threshold for context maintenance; set to Default to use legacy reserve-based behavior",
-			submenu: true,
-		},
-	},
-	"compaction.handoffSaveToDisk": {
-		type: "boolean",
-		default: false,
-		ui: {
-			tab: "agent",
-			label: "Save auto-handoff docs",
-			description: "Save generated handoff documents to markdown files for the auto-handoff flow",
-		},
-	},
 	"compaction.reserveTokens": { type: "number", default: 16384 },
 	"compaction.keepRecentTokens": { type: "number", default: 20000 },
-	"compaction.autoContinue": { type: "boolean", default: true },
 	"compaction.remoteEnabled": {
 		type: "boolean",
 		default: true,
@@ -1331,13 +1291,8 @@ export type StatusLineSeparatorStyle = SettingValue<"statusLine.separator">;
 // ═══════════════════════════════════════════════════════════════════════════
 
 export interface CompactionSettings {
-	enabled: boolean;
-	strategy: "context-full" | "handoff" | "off";
-	thresholdPercent: number;
 	reserveTokens: number;
 	keepRecentTokens: number;
-	handoffSaveToDisk: boolean;
-	autoContinue: boolean;
 	remoteEnabled: boolean;
 	remoteEndpoint: string | undefined;
 }

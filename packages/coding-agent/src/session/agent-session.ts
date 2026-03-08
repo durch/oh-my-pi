@@ -115,7 +115,6 @@ import {
 	estimateTokens,
 	generateBranchSummary,
 	prepareCompaction,
-	shouldCompact,
 } from "./compaction";
 import { DEFAULT_PRUNE_CONFIG, pruneToolOutputs } from "./compaction/pruning";
 import {
@@ -263,7 +262,6 @@ export interface HandoffResult {
 }
 
 interface HandoffOptions {
-	autoTriggered?: boolean;
 	signal?: AbortSignal;
 }
 
@@ -338,7 +336,6 @@ export class AgentSession {
 
 	// Compaction state
 	#compactionAbortController: AbortController | undefined = undefined;
-	#autoCompactionAbortController: AbortController | undefined = undefined;
 
 	// Branch summarization state
 	#branchSummaryAbortController: AbortController | undefined = undefined;
@@ -1708,9 +1705,9 @@ export class AgentSession {
 		await this.setActiveToolsByName(nextActive);
 	}
 
-	/** Whether auto-compaction is currently running */
+	/** Whether compaction is currently running */
 	get isCompacting(): boolean {
-		return this.#autoCompactionAbortController !== undefined || this.#compactionAbortController !== undefined;
+		return this.#compactionAbortController !== undefined;
 	}
 
 	/** All messages including custom types like BashExecutionMessage */
@@ -3143,11 +3140,10 @@ export class AgentSession {
 	}
 
 	/**
-	 * Cancel in-progress context maintenance (manual compaction, auto-compaction, or auto-handoff).
+	 * Cancel in-progress context maintenance (manual compaction or auto-handoff).
 	 */
 	abortCompaction(): void {
 		this.#compactionAbortController?.abort();
-		this.#autoCompactionAbortController?.abort();
 		this.#handoffAbortController?.abort();
 	}
 
@@ -3320,25 +3316,7 @@ Be thorough - include exact file paths, function names, error messages, and tech
 			// Inject the handoff document as a custom message
 			const handoffContent = `<handoff-context>\n${handoffText}\n</handoff-context>\n\nThe above is a handoff document from a previous session. Use this context to continue the work seamlessly.`;
 			this.sessionManager.appendCustomMessageEntry("handoff", handoffContent, true, undefined, "agent");
-			let savedPath: string | undefined;
-			if (options?.autoTriggered && this.settings.get("compaction.handoffSaveToDisk")) {
-				const artifactsDir = this.sessionManager.getArtifactsDir();
-				if (artifactsDir) {
-					const fileTimestamp = new Date().toISOString().replace(/[:.]/g, "-");
-					const handoffFilePath = path.join(artifactsDir, `handoff-${fileTimestamp}.md`);
-					try {
-						await Bun.write(handoffFilePath, `${handoffText}\n`);
-						savedPath = handoffFilePath;
-					} catch (error) {
-						logger.warn("Failed to save handoff document to disk", {
-							path: handoffFilePath,
-							error: error instanceof Error ? error.message : String(error),
-						});
-					}
-				} else {
-					logger.debug("Skipping handoff document save because session is not persisted");
-				}
-			}
+			const savedPath: string | undefined = undefined;
 
 			// Rebuild agent messages from session
 			const sessionContext = this.sessionManager.buildSessionContext();
@@ -3400,31 +3378,7 @@ Be thorough - include exact file paths, function names, error messages, and tech
 				this.#scheduleAgentContinue({ delayMs: 100, generation });
 				return;
 			}
-
-			// No promotion target available fall through to compaction
-			const compactionSettings = this.settings.getGroup("compaction");
-			if (compactionSettings.enabled && compactionSettings.strategy !== "off") {
-				await this.#runAutoCompaction("overflow", true);
-			}
 			return;
-		}
-		const compactionSettings = this.settings.getGroup("compaction");
-		if (!compactionSettings.enabled || compactionSettings.strategy === "off") return;
-
-		// Case 2: Threshold - turn succeeded but context is getting large
-		// Skip if this was an error (non-overflow errors don't have usage data)
-		if (assistantMessage.stopReason === "error") return;
-		const pruneResult = await this.#pruneToolOutputs();
-		let contextTokens = calculateContextTokens(assistantMessage.usage);
-		if (pruneResult) {
-			contextTokens = Math.max(0, contextTokens - pruneResult.tokensSaved);
-		}
-		if (shouldCompact(contextTokens, contextWindow, compactionSettings)) {
-			// Try promotion first — if a larger model is available, switch instead of compacting
-			const promoted = await this.#tryContextPromotion(assistantMessage);
-			if (!promoted) {
-				await this.#runAutoCompaction("threshold", false);
-			}
 		}
 	}
 	#enforceRewindBeforeYield(): boolean {
@@ -3718,399 +3672,7 @@ Be thorough - include exact file paths, function names, error messages, and tech
 		}).model;
 	}
 
-	#getCompactionModelCandidates(availableModels: Model[]): Model[] {
-		const candidates: Model[] = [];
-		const seen = new Set<string>();
-
-		const addCandidate = (model: Model | undefined): void => {
-			if (!model) return;
-			const key = this.#getModelKey(model);
-			if (seen.has(key)) return;
-			seen.add(key);
-			candidates.push(model);
-		};
-
-		const currentModel = this.model;
-		for (const role of MODEL_ROLE_IDS) {
-			addCandidate(this.#resolveRoleModel(role, availableModels, currentModel));
-		}
-
-		const sortedByContext = [...availableModels].sort((a, b) => b.contextWindow - a.contextWindow);
-		for (const model of sortedByContext) {
-			if (!seen.has(this.#getModelKey(model))) {
-				addCandidate(model);
-				break;
-			}
-		}
-
-		return candidates;
-	}
-
 	/**
-	 * Internal: Run auto-compaction with events.
-	 */
-	async #runAutoCompaction(reason: "overflow" | "threshold", willRetry: boolean): Promise<void> {
-		const compactionSettings = this.settings.getGroup("compaction");
-
-		if (!compactionSettings.enabled || compactionSettings.strategy === "off") return;
-		const generation = this.#promptGeneration;
-		let action: "context-full" | "handoff" =
-			compactionSettings.strategy === "handoff" && reason !== "overflow" ? "handoff" : "context-full";
-		await this.#emitSessionEvent({ type: "auto_compaction_start", reason, action });
-		// Properly abort and null existing controller before replacing
-		if (this.#autoCompactionAbortController) {
-			this.#autoCompactionAbortController.abort();
-		}
-		this.#autoCompactionAbortController = new AbortController();
-
-		try {
-			if (compactionSettings.strategy === "handoff" && reason !== "overflow") {
-				const handoffFocus = AUTO_HANDOFF_THRESHOLD_FOCUS;
-				const handoffResult = await this.handoff(handoffFocus, {
-					autoTriggered: true,
-					signal: this.#autoCompactionAbortController.signal,
-				});
-				if (!handoffResult) {
-					const aborted = this.#autoCompactionAbortController.signal.aborted;
-					if (aborted) {
-						await this.#emitSessionEvent({
-							type: "auto_compaction_end",
-							action,
-							result: undefined,
-							aborted: true,
-							willRetry: false,
-						});
-						return;
-					}
-					logger.warn("Auto-handoff returned no document; falling back to context-full maintenance", {
-						reason,
-					});
-					action = "context-full";
-				}
-				if (handoffResult) {
-					await this.#emitSessionEvent({
-						type: "auto_compaction_end",
-						action,
-						result: undefined,
-						aborted: false,
-						willRetry: false,
-					});
-					return;
-				}
-			}
-
-			if (!this.model) {
-				await this.#emitSessionEvent({
-					type: "auto_compaction_end",
-					action,
-					result: undefined,
-					aborted: false,
-					willRetry: false,
-				});
-				return;
-			}
-
-			const availableModels = this.#modelRegistry.getAvailable();
-			if (availableModels.length === 0) {
-				await this.#emitSessionEvent({
-					type: "auto_compaction_end",
-					action,
-					result: undefined,
-					aborted: false,
-					willRetry: false,
-				});
-				return;
-			}
-
-			const pathEntries = this.sessionManager.getBranch();
-
-			const preparation = prepareCompaction(pathEntries, compactionSettings);
-			if (!preparation) {
-				await this.#emitSessionEvent({
-					type: "auto_compaction_end",
-					action,
-					result: undefined,
-					aborted: false,
-					willRetry: false,
-				});
-				return;
-			}
-
-			let hookCompaction: CompactionResult | undefined;
-			let fromExtension = false;
-			let hookContext: string[] | undefined;
-			let hookPrompt: string | undefined;
-			let preserveData: Record<string, unknown> | undefined;
-
-			if (this.#extensionRunner?.hasHandlers("session_before_compact")) {
-				const hookResult = (await this.#extensionRunner.emit({
-					type: "session_before_compact",
-					preparation,
-					branchEntries: pathEntries,
-					customInstructions: undefined,
-					signal: this.#autoCompactionAbortController.signal,
-				})) as SessionBeforeCompactResult | undefined;
-
-				if (hookResult?.cancel) {
-					await this.#emitSessionEvent({
-						type: "auto_compaction_end",
-						action,
-						result: undefined,
-						aborted: true,
-						willRetry: false,
-					});
-					return;
-				}
-
-				if (hookResult?.compaction) {
-					hookCompaction = hookResult.compaction;
-					fromExtension = true;
-				}
-			}
-
-			if (!hookCompaction && this.#extensionRunner?.hasHandlers("session.compacting")) {
-				const compactMessages = preparation.messagesToSummarize.concat(preparation.turnPrefixMessages);
-				const result = (await this.#extensionRunner.emit({
-					type: "session.compacting",
-					sessionId: this.sessionId,
-					messages: compactMessages,
-				})) as { context?: string[]; prompt?: string; preserveData?: Record<string, unknown> } | undefined;
-
-				hookContext = result?.context;
-				hookPrompt = result?.prompt;
-				preserveData = result?.preserveData;
-			}
-
-			let summary: string;
-			let shortSummary: string | undefined;
-			let firstKeptEntryId: string;
-			let tokensBefore: number;
-			let details: unknown;
-
-			if (hookCompaction) {
-				// Extension provided compaction content
-				summary = hookCompaction.summary;
-				shortSummary = hookCompaction.shortSummary;
-				firstKeptEntryId = hookCompaction.firstKeptEntryId;
-				tokensBefore = hookCompaction.tokensBefore;
-				details = hookCompaction.details;
-				preserveData ??= hookCompaction.preserveData;
-			} else {
-				const candidates = this.#getCompactionModelCandidates(availableModels);
-				const retrySettings = this.settings.getGroup("retry");
-				let compactResult: CompactionResult | undefined;
-				let lastError: unknown;
-
-				for (const candidate of candidates) {
-					const apiKey = await this.#modelRegistry.getApiKey(candidate, this.sessionId);
-					if (!apiKey) continue;
-
-					let attempt = 0;
-					while (true) {
-						try {
-							compactResult = await compact(
-								preparation,
-								candidate,
-								apiKey,
-								undefined,
-								this.#autoCompactionAbortController.signal,
-								{
-									promptOverride: hookPrompt,
-									extraContext: hookContext,
-									remoteInstructions: this.#baseSystemPrompt,
-								},
-							);
-							break;
-						} catch (error) {
-							if (this.#autoCompactionAbortController.signal.aborted) {
-								throw error;
-							}
-
-							const message = error instanceof Error ? error.message : String(error);
-							const retryAfterMs = this.#parseRetryAfterMsFromError(message);
-							const shouldRetry =
-								retrySettings.enabled &&
-								attempt < retrySettings.maxRetries &&
-								(retryAfterMs !== undefined || this.#isRetryableErrorMessage(message));
-							if (!shouldRetry) {
-								lastError = error;
-								break;
-							}
-
-							const baseDelayMs = retrySettings.baseDelayMs * 2 ** attempt;
-							const delayMs = retryAfterMs !== undefined ? Math.max(baseDelayMs, retryAfterMs) : baseDelayMs;
-
-							// If retry delay is too long (>30s), try next candidate instead of waiting
-							const maxAcceptableDelayMs = 30_000;
-							if (delayMs > maxAcceptableDelayMs) {
-								const hasMoreCandidates = candidates.indexOf(candidate) < candidates.length - 1;
-								if (hasMoreCandidates) {
-									logger.warn("Auto-compaction retry delay too long, trying next model", {
-										delayMs,
-										retryAfterMs,
-										error: message,
-										model: `${candidate.provider}/${candidate.id}`,
-									});
-									lastError = error;
-									break; // Exit retry loop, continue to next candidate
-								}
-								// No more candidates - we have to wait
-							}
-
-							attempt++;
-							logger.warn("Auto-compaction failed, retrying", {
-								attempt,
-								maxRetries: retrySettings.maxRetries,
-								delayMs,
-								retryAfterMs,
-								error: message,
-								model: `${candidate.provider}/${candidate.id}`,
-							});
-							await abortableSleep(delayMs, this.#autoCompactionAbortController.signal);
-						}
-					}
-
-					if (compactResult) {
-						break;
-					}
-				}
-
-				if (!compactResult) {
-					if (lastError) {
-						throw lastError;
-					}
-					throw new Error("Compaction failed: no available model");
-				}
-
-				summary = compactResult.summary;
-				shortSummary = compactResult.shortSummary;
-				firstKeptEntryId = compactResult.firstKeptEntryId;
-				tokensBefore = compactResult.tokensBefore;
-				details = compactResult.details;
-				preserveData = { ...(preserveData ?? {}), ...(compactResult.preserveData ?? {}) };
-			}
-
-			if (this.#autoCompactionAbortController.signal.aborted) {
-				await this.#emitSessionEvent({
-					type: "auto_compaction_end",
-					action,
-					result: undefined,
-					aborted: true,
-					willRetry: false,
-				});
-				return;
-			}
-
-			this.sessionManager.appendCompaction(
-				summary,
-				shortSummary,
-				firstKeptEntryId,
-				tokensBefore,
-				details,
-				fromExtension,
-				preserveData,
-			);
-			const newEntries = this.sessionManager.getEntries();
-			const sessionContext = this.sessionManager.buildSessionContext();
-			this.agent.replaceMessages(sessionContext.messages);
-			this.#syncTodoPhasesFromBranch();
-			this.#closeCodexProviderSessionsForHistoryRewrite();
-
-			// Get the saved compaction entry for the hook
-			const savedCompactionEntry = newEntries.find(e => e.type === "compaction" && e.summary === summary) as
-				| CompactionEntry
-				| undefined;
-
-			if (this.#extensionRunner && savedCompactionEntry) {
-				await this.#extensionRunner.emit({
-					type: "session_compact",
-					compactionEntry: savedCompactionEntry,
-					fromExtension,
-				});
-			}
-
-			const result: CompactionResult = {
-				summary,
-				shortSummary,
-				firstKeptEntryId,
-				tokensBefore,
-				details,
-				preserveData,
-			};
-			await this.#emitSessionEvent({ type: "auto_compaction_end", action, result, aborted: false, willRetry });
-
-			if (!willRetry && compactionSettings.autoContinue !== false) {
-				await this.#promptWithMessage(
-					{
-						role: "developer",
-						content: [{ type: "text", text: "Continue if you have next steps." }],
-						attribution: "agent",
-						timestamp: Date.now(),
-					},
-					"Continue if you have next steps.",
-					{ skipPostPromptRecoveryWait: true },
-				);
-			}
-
-			if (willRetry) {
-				const messages = this.agent.state.messages;
-				const lastMsg = messages[messages.length - 1];
-				if (lastMsg?.role === "assistant" && (lastMsg as AssistantMessage).stopReason === "error") {
-					this.agent.replaceMessages(messages.slice(0, -1));
-				}
-
-				this.#scheduleAgentContinue({ delayMs: 100, generation });
-			} else if (this.agent.hasQueuedMessages()) {
-				// Auto-compaction can complete while follow-up/steering/custom messages are waiting.
-				// Kick the loop so queued messages are actually delivered.
-				this.#scheduleAgentContinue({
-					delayMs: 100,
-					generation,
-					shouldContinue: () => this.agent.hasQueuedMessages(),
-				});
-			}
-		} catch (error) {
-			if (this.#autoCompactionAbortController?.signal.aborted) {
-				await this.#emitSessionEvent({
-					type: "auto_compaction_end",
-					action,
-					result: undefined,
-					aborted: true,
-					willRetry: false,
-				});
-				return;
-			}
-			const errorMessage = error instanceof Error ? error.message : "compaction failed";
-			await this.#emitSessionEvent({
-				type: "auto_compaction_end",
-				action,
-				result: undefined,
-				aborted: false,
-				willRetry: false,
-				errorMessage:
-					reason === "overflow"
-						? `Context overflow recovery failed: ${errorMessage}`
-						: `Auto-compaction failed: ${errorMessage}`,
-			});
-		} finally {
-			this.#autoCompactionAbortController = undefined;
-		}
-	}
-
-	/**
-	 * Toggle auto-compaction setting.
-	 */
-	setAutoCompactionEnabled(enabled: boolean): void {
-		this.settings.set("compaction.enabled", enabled);
-		if (enabled && this.settings.get("compaction.strategy") === "off") {
-			this.settings.set("compaction.strategy", "context-full");
-		}
-	}
-
-	/** Whether auto-compaction is enabled */
-	get autoCompactionEnabled(): boolean {
-		return this.settings.get("compaction.enabled") && this.settings.get("compaction.strategy") !== "off";
-	}
 
 	// =========================================================================
 	// Auto-Retry
@@ -4118,12 +3680,12 @@ Be thorough - include exact file paths, function names, error messages, and tech
 
 	/**
 	 * Check if an error is retryable (overloaded, rate limit, server errors).
-	 * Context overflow errors are NOT retryable (handled by compaction instead).
+	 * Context overflow errors are NOT retryable.
 	 */
 	#isRetryableError(message: AssistantMessage): boolean {
 		if (message.stopReason !== "error" || !message.errorMessage) return false;
 
-		// Context overflow is handled by compaction, not retry
+		// Context overflow is not retryable
 		const contextWindow = this.model?.contextWindow ?? 0;
 		if (isContextOverflow(message, contextWindow)) return false;
 

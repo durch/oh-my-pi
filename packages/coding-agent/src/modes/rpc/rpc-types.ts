@@ -44,7 +44,6 @@ export type RpcCommand =
 
 	// Compaction
 	| { id?: string; type: "compact"; customInstructions?: string }
-	| { id?: string; type: "set_auto_compaction"; enabled: boolean }
 
 	// Retry
 	| { id?: string; type: "set_auto_retry"; enabled: boolean }
@@ -84,7 +83,6 @@ export interface RpcSessionState {
 	sessionFile?: string;
 	sessionId: string;
 	sessionName?: string;
-	autoCompactionEnabled: boolean;
 	messageCount: number;
 	queuedMessageCount: number;
 }
@@ -146,7 +144,6 @@ export type RpcResponse =
 
 	// Compaction
 	| { id?: string; type: "response"; command: "compact"; success: true; data: CompactionResult }
-	| { id?: string; type: "response"; command: "set_auto_compaction"; success: true }
 
 	// Retry
 	| { id?: string; type: "response"; command: "set_auto_retry"; success: true }
