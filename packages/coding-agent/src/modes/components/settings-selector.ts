@@ -288,9 +288,6 @@ export class SettingsSelectorComponent extends Container {
 
 	#getSubmenuCurrentValue(path: SettingPath, value: unknown): string {
 		const rawValue = String(value ?? "");
-		if (path === "compaction.thresholdPercent" && (rawValue === "-1" || rawValue === "")) {
-			return "default";
-		}
 		return rawValue;
 	}
 
@@ -391,9 +388,7 @@ export class SettingsSelectorComponent extends Container {
 	#setSettingValue(path: SettingPath, value: string): void {
 		// Handle number conversions
 		const currentValue = settings.get(path);
-		if (path === "compaction.thresholdPercent" && value === "default") {
-			settings.set(path, -1 as never);
-		} else if (typeof currentValue === "number") {
+		if (typeof currentValue === "number") {
 			settings.set(path, Number(value) as never);
 		} else if (typeof currentValue === "boolean") {
 			settings.set(path, (value === "true") as never);

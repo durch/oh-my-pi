@@ -32,7 +32,6 @@ export class ContextManagerConfigError extends Error {
  */
 interface LegacySubsystemState {
 	memoriesEnabled: boolean;
-	compactionEnabled: boolean;
 }
 
 /**
@@ -48,7 +47,6 @@ export function validateContextManagerConfig(settings: Settings): void {
 
 	const subsystems: LegacySubsystemState = {
 		memoriesEnabled: settings.get("memories.enabled"),
-		compactionEnabled: settings.get("compaction.enabled"),
 	};
 
 	switch (mode) {
@@ -66,7 +64,6 @@ export function validateContextManagerConfig(settings: Settings): void {
 			{
 				const conflicts: string[] = [];
 				if (subsystems.memoriesEnabled) conflicts.push("memories.enabled");
-				if (subsystems.compactionEnabled) conflicts.push("compaction.enabled");
 				if (conflicts.length > 0) {
 					throw new ContextManagerConfigError(
 						`Context manager mode 'assembler' conflicts with active legacy subsystems: ${conflicts.join(", ")}. ` +

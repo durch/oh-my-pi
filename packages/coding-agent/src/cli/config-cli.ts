@@ -402,7 +402,7 @@ ${chalk.bold("Examples:")}
   ${APP_NAME} config list
   ${APP_NAME} config get theme
   ${APP_NAME} config set theme catppuccin-mocha
-  ${APP_NAME} config set compaction.enabled false
+  ${APP_NAME} config set compaction.remoteEnabled false
   ${APP_NAME} config set defaultThinkingLevel medium
   ${APP_NAME} config reset steeringMode
   ${APP_NAME} config list --json

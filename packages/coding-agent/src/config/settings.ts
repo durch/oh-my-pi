@@ -4,11 +4,11 @@
  * Usage:
  *   import { settings } from "./settings";
  *
- *   const enabled = settings.get("compaction.enabled");  // sync read
+ *   const tokens = settings.get("compaction.reserveTokens");  // sync read
  *   settings.set("theme.dark", "titanium");               // sync write, saves in background
  *
  * For tests:
- *   const isolated = Settings.isolated({ "compaction.enabled": false });
+ *   const isolated = Settings.isolated({ "compaction.reserveTokens": 8192 });
  */
 
 import * as fs from "node:fs";
@@ -70,7 +70,7 @@ export interface SettingsOptions {
 
 /**
  * Parse a dotted path into segments.
- * "compaction.enabled" → ["compaction", "enabled"]
+ * "compaction.reserveTokens" → ["compaction", "reserveTokens"]
  * "theme.dark" → ["theme", "dark"]
  */
 function parsePath(path: string): string[] {

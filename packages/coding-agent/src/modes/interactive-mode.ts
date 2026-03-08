@@ -115,11 +115,9 @@ export class InteractiveMode implements InteractiveModeContext {
 	streamingComponent: AssistantMessageComponent | undefined = undefined;
 	streamingMessage: AssistantMessage | undefined = undefined;
 	loadingAnimation: Loader | undefined = undefined;
-	autoCompactionLoader: Loader | undefined = undefined;
 	retryLoader: Loader | undefined = undefined;
 	#pendingWorkingMessage: string | undefined;
 	readonly #defaultWorkingMessage = `Working… (esc to interrupt)`;
-	autoCompactionEscapeHandler?: () => void;
 	retryEscapeHandler?: () => void;
 	unsubscribe?: () => void;
 	onInputCallback?: (input: { text: string; images?: ImageContent[] }) => void;
@@ -214,7 +212,6 @@ export class InteractiveMode implements InteractiveModeContext {
 		this.editorContainer = new Container();
 		this.editorContainer.addChild(this.editor);
 		this.statusLine = new StatusLineComponent(session);
-		this.statusLine.setAutoCompactEnabled(session.autoCompactionEnabled);
 
 		this.hideThinkingBlock = settings.get("hideThinkingBlock");
 

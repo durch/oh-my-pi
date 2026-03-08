@@ -248,8 +248,7 @@ const contextPctSegment: StatusLineSegment = {
 		const pct = ctx.contextPercent;
 		const window = ctx.contextWindow;
 
-		const autoIcon = ctx.autoCompactEnabled && theme.icon.auto ? ` ${theme.icon.auto}` : "";
-		const text = `${pct.toFixed(1)}%/${formatNumber(window)}${autoIcon}`;
+		const text = `${pct.toFixed(1)}%/${formatNumber(window)}`;
 
 		const color = getContextUsageThemeColor(getContextUsageLevel(pct, window));
 		const content = withIcon(theme.icon.context, theme.fg(color, text));

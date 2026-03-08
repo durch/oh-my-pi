@@ -36,7 +36,6 @@ export interface SegmentContext {
 	};
 	contextPercent: number;
 	contextWindow: number;
-	autoCompactEnabled: boolean;
 	subagentCount: number;
 	sessionStartTime: number;
 	git: {

@@ -32,9 +32,7 @@ export class InputController {
 					this.ctx.session.isGeneratingHandoff ||
 					this.ctx.session.isBashRunning ||
 					this.ctx.session.isPythonRunning ||
-					this.ctx.autoCompactionLoader ||
 					this.ctx.retryLoader ||
-					this.ctx.autoCompactionEscapeHandler ||
 					this.ctx.retryEscapeHandler,
 			);
 		this.ctx.editor.onEscape = () => {
@@ -428,10 +426,6 @@ export class InputController {
 		if (this.ctx.loadingAnimation) {
 			this.ctx.loadingAnimation.stop();
 			this.ctx.loadingAnimation = undefined;
-		}
-		if (this.ctx.autoCompactionLoader) {
-			this.ctx.autoCompactionLoader.stop();
-			this.ctx.autoCompactionLoader = undefined;
 		}
 		if (this.ctx.retryLoader) {
 			this.ctx.retryLoader.stop();

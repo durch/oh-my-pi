@@ -82,9 +82,7 @@ export interface InteractiveModeContext {
 	streamingComponent: AssistantMessageComponent | undefined;
 	streamingMessage: AssistantMessage | undefined;
 	loadingAnimation: Loader | undefined;
-	autoCompactionLoader: Loader | undefined;
 	retryLoader: Loader | undefined;
-	autoCompactionEscapeHandler?: () => void;
 	retryEscapeHandler?: () => void;
 	unsubscribe?: () => void;
 	onInputCallback?: (input: { text: string; images?: ImageContent[] }) => void;
