@@ -12,6 +12,7 @@ permissions:
 jobs:
   build:
     strategy:
+      fail-fast: false
       matrix:
         include:
           - os: namespace-profile-tahoe
@@ -34,6 +35,9 @@ jobs:
 
       - run: bun check
         name: Verify build
+
+      - run: bun --cwd=packages/natives run build:native
+        name: Build native addon
 
       - run: make build
         name: Build binary
