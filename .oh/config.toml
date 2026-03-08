@@ -1,0 +1,2 @@
+[scanner]
+exclude = [".fastembed_cache/", "npm/", ".oh-omp/"]
