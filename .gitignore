@@ -40,6 +40,8 @@ packages/ai/test/.temp-images/
 # Project specific
 .omp/
 .mcp.json
+.oh/.cache/
+.fastembed_cache/
 .pi_config/
 .opencode/
 .worktrees/
