@@ -513,7 +513,6 @@ export class AgentSession {
 		this.#emit(event);
 	}
 
-
 	/** Internal handler for agent events - shared by subscribe and reconnect */
 	#handleAgentEvent = async (event: AgentEvent): Promise<void> => {
 		// When a user message starts, check if it's from either queue and remove it BEFORE emitting
