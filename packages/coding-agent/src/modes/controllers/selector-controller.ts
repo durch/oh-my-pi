@@ -22,6 +22,7 @@ import { setPreferredImageProvider, setPreferredSearchProvider } from "../../too
 import { AgentDashboard } from "../components/agent-dashboard";
 import { AssistantMessageComponent } from "../components/assistant-message";
 import { ExtensionDashboard } from "../components/extensions";
+import { PromptInspector } from "../components/prompt-inspector";
 import { HistorySearchComponent } from "../components/history-search";
 import { ModelSelectorComponent } from "../components/model-selector";
 import { OAuthSelectorComponent } from "../components/oauth-selector";
@@ -190,6 +191,21 @@ export class SelectorController {
 				this.ctx.ui.requestRender();
 			};
 			return { component: dashboard, focus: dashboard };
+		});
+	}
+
+	/**
+	 * Show the Prompt Composition Inspector.
+	 */
+	showPromptInspector(): void {
+		const snapshot = this.ctx.session.lastPromptSnapshot;
+		const inspector = new PromptInspector(snapshot, this.ctx.ui.terminal.rows);
+		this.showSelector(done => {
+			inspector.onClose = () => {
+				done();
+				this.ctx.ui.requestRender();
+			};
+			return { component: inspector, focus: inspector };
 		});
 	}
 

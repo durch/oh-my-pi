@@ -280,6 +280,15 @@ const BUILTIN_SLASH_COMMAND_REGISTRY: ReadonlyArray<BuiltinSlashCommandSpec> = [
 		},
 	},
 	{
+		name: "prompt",
+		aliases: ["inspector"],
+		description: "Open Prompt Composition Inspector",
+		handle: (_command, runtime) => {
+			runtime.ctx.showPromptInspector();
+			runtime.ctx.editor.setText("");
+		},
+	},
+	{
 		name: "branch",
 		description: "Create a new branch from a previous message",
 		handle: (_command, runtime) => {
