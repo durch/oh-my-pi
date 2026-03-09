@@ -3,6 +3,7 @@ import { $env, logger } from "@oh-my-pi/pi-utils";
 import type { AsyncJobManager } from "../async";
 import type { PromptTemplate } from "../config/prompt-templates";
 import type { Settings } from "../config/settings";
+import type { RecallStore } from "../context/recall/store";
 import type { Skill } from "../extensibility/skills";
 import type { InternalUrlRouter } from "../internal-urls";
 import { getPreludeDocs, warmPythonEnvironment } from "../ipy/executor";
@@ -31,6 +32,7 @@ import { NotebookTool } from "./notebook";
 import { wrapToolWithMetaNotice } from "./output-meta";
 import { PythonTool } from "./python";
 import { ReadTool } from "./read";
+import { RecallTool } from "./recall";
 import { RenderMermaidTool } from "./render-mermaid";
 import { ResolveTool } from "./resolve";
 import { reportFindingTool } from "./review";
@@ -66,6 +68,7 @@ export * from "./notebook";
 export * from "./pending-action";
 export * from "./python";
 export * from "./read";
+export * from "./recall";
 export * from "./render-mermaid";
 export * from "./resolve";
 export * from "./review";
@@ -151,6 +154,10 @@ export interface ToolSession {
 	getCheckpointState?: () => CheckpointState | undefined;
 	/** Set or clear active checkpoint state. */
 	setCheckpointState?: (state: CheckpointState | null) => void;
+	/** RecallStore for session history vector search (available when recall infrastructure is initialized). */
+	recallStore?: RecallStore;
+	/** Memex license key for embedding queries (available when recall infrastructure is initialized). */
+	memexLicense?: string;
 }
 
 type ToolFactory = (session: ToolSession) => Tool | null | Promise<Tool | null>;
@@ -180,6 +187,7 @@ export const BUILTIN_TOOLS: Record<string, ToolFactory> = {
 	fetch: s => new FetchTool(s),
 	web_search: s => new SearchTool(s),
 	write: s => new WriteTool(s),
+	recall: RecallTool.createIf,
 };
 
 export const HIDDEN_TOOLS: Record<string, ToolFactory> = {
