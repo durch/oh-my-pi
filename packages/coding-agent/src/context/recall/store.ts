@@ -46,7 +46,7 @@ export class RecallStore {
 				session_id: options.sessionId,
 			};
 			table = await db.createTable(TABLE_NAME, [seedRow]);
-			await table.delete("timestamp = 0");
+			await table.delete("timestamp = 0 AND tool_name = '__seed__'");
 		}
 
 		logger.debug("RecallStore initialized", { path: dbPath });

@@ -78,6 +78,10 @@ describe("cosineSimilarity", () => {
 		const result = cosineSimilarity(a, a);
 		expect(result).toBeCloseTo(1.0, 5);
 	});
+
+	test("throws on length mismatch", () => {
+		expect(() => cosineSimilarity([1, 2], [1, 2, 3])).toThrow("length mismatch");
+	});
 });
 
 // ═══════════════════════════════════════════════════════════════════════════

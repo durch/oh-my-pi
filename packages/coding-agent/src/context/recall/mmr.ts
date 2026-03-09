@@ -5,6 +5,9 @@ import { DEFAULT_RECALL_MMR_LAMBDA } from "./types";
  * Cosine similarity between two vectors. Returns 0 for zero-magnitude vectors.
  */
 export function cosineSimilarity(a: number[], b: number[]): number {
+	if (a.length !== b.length) {
+		throw new Error(`cosineSimilarity: length mismatch (${a.length} vs ${b.length})`);
+	}
 	let dot = 0;
 	let magA = 0;
 	let magB = 0;
