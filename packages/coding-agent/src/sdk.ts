@@ -33,6 +33,7 @@ import {
 	type TransformMetadata,
 	transformMessages,
 } from "./context/assembler";
+import { formatAssemblySummary } from "./context/assembly-summary";
 import { ToolResultBridge } from "./context/bridge";
 import { captureEffectivePromptSnapshot, type EffectivePromptSnapshot } from "./context/effective-prompt-snapshot";
 import { extractPaths } from "./context/extract-paths";
@@ -1481,6 +1482,20 @@ export async function createAgentSession(options: CreateAgentSessionOptions = {}
 				assemblerPacket: null,
 				assemblerBudget: budget ?? null,
 			});
+
+			// Step 6: Inject assembly summary as developer message.
+			const summary = formatAssemblySummary(lastPromptSnapshot);
+			if (summary) {
+				return [
+					{
+						role: "developer" as const,
+						content: summary,
+						attribution: "agent" as const,
+						timestamp: Date.now(),
+					} satisfies AgentMessage,
+					...finalMessages,
+				];
+			}
 
 			return finalMessages;
 		};
