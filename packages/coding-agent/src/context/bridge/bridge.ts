@@ -118,14 +118,20 @@ export class ToolResultBridge {
 	 *
 	 * This is the main entry point called by the event subscriber.
 	 */
-	handleToolResult(toolName: string, toolCallId: string, args: unknown, result: unknown, isError: boolean): void {
+	handleToolResult(
+		toolName: string,
+		toolCallId: string,
+		args: unknown,
+		result: unknown,
+		isError: boolean,
+	): ResultProfile | null {
 		const safeArgs = (typeof args === "object" && args !== null ? args : {}) as Record<string, unknown>;
 
 		const profile = classifyResult(toolName, safeArgs, result, isError);
 
 		// Control tools are never retained
 		if (profile.category === "control") {
-			return;
+			return null;
 		}
 
 		// Track mutations for invalidation
@@ -141,6 +147,7 @@ export class ToolResultBridge {
 
 		// Accumulate STM state
 		this.#accumulateSTM(profile);
+		return profile;
 	}
 
 	// ═════════════════════════════════════════════════════════════════════

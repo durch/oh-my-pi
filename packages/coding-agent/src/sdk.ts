@@ -1694,7 +1694,7 @@ export async function createAgentSession(options: CreateAgentSessionOptions = {}
 			} else if (event.type === "tool_execution_end") {
 				const args = pendingArgs.get(event.toolCallId) ?? {};
 				pendingArgs.delete(event.toolCallId);
-				assemblerBridge.handleToolResult(
+				const profile = assemblerBridge.handleToolResult(
 					event.toolName,
 					event.toolCallId,
 					args,
@@ -1713,6 +1713,7 @@ export async function createAgentSession(options: CreateAgentSessionOptions = {}
 						turn: ingestTurn,
 						toolName: event.toolName,
 						paths: extractPaths(event.toolName, safeArgs),
+						symbols: profile?.touchedSymbols,
 					});
 				}
 			}
