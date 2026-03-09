@@ -101,6 +101,7 @@ function makeTransformMetadata(overrides?: Partial<TransformMetadata>): Transfor
 				hasToolResults: false,
 				tokensBefore: 50,
 				tokensAfter: 50,
+				sourceTags: [],
 			},
 		],
 		totalTurns: 1,
@@ -288,6 +289,7 @@ describe("projectSnapshot", () => {
 			hasToolResults: true,
 			tokensBefore: 500,
 			tokensAfter: 0,
+			sourceTags: [],
 		};
 
 		const snapshot = makeSnapshot({
@@ -535,6 +537,7 @@ describe("projection edge cases", () => {
 						hasToolResults: false,
 						tokensBefore: 50,
 						tokensAfter: 50,
+						sourceTags: [],
 					},
 				],
 			}),

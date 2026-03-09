@@ -91,6 +91,7 @@ function makeDecision(overrides?: Partial<TurnDecision>): TurnDecision {
 		hasToolResults: false,
 		tokensBefore: 50,
 		tokensAfter: 50,
+		sourceTags: [],
 		...overrides,
 	};
 }

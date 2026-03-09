@@ -13,6 +13,7 @@
 
 import type { AgentMessage } from "@oh-my-pi/pi-agent-core";
 import { logger } from "@oh-my-pi/pi-utils";
+import { parseMCPToolName } from "../../mcp/tool-bridge";
 import { embed } from "./embed";
 import { extractAssistantText, extractToolResultText, extractUserText } from "./message-text";
 import { cosineSimilarity, mmrRerank } from "./mmr";
@@ -147,7 +148,7 @@ export class CosineCache {
  *
  * Returns null when there are no results to inject.
  */
-export function formatHydratedContext(results: RecallSearchResult[]): string | null {
+export function formatHydratedContext(results: RecallSearchResult[], currentSessionId?: string): string | null {
 	if (results.length === 0) return null;
 
 	const parts: string[] = ["<recalled-context>"];
@@ -156,6 +157,17 @@ export function formatHydratedContext(results: RecallSearchResult[]): string | n
 		const attrs: string[] = [`turn="${result.turn}"`, `role="${result.role}"`];
 		if (result.tool_name) {
 			attrs.push(`tool="${result.tool_name}"`);
+			const mcpParts = parseMCPToolName(result.tool_name);
+			if (mcpParts) {
+				attrs.push(`source="mcp:${mcpParts.serverName}"`);
+			} else {
+				attrs.push(`source="tool:${result.tool_name}"`);
+			}
+		} else {
+			attrs.push(`source="${result.role}"`);
+		}
+		if (currentSessionId) {
+			attrs.push(`session="${result.session_id === currentSessionId ? "current" : "other"}"`);
 		}
 		parts.push(`<entry ${attrs.join(" ")}>`);
 		parts.push(result.text);
@@ -173,6 +185,7 @@ export function formatHydratedContext(results: RecallSearchResult[]): string | n
 export interface PassiveHydratorOptions {
 	store: RecallStore;
 	license: string;
+	sessionId?: string;
 	topK?: number;
 	mmrLambda?: number;
 	cosineThreshold?: number;
@@ -193,6 +206,7 @@ export interface HydrationResult {
 export class PassiveHydrator {
 	#store: RecallStore;
 	#license: string;
+	#sessionId: string;
 	#cache: CosineCache;
 	#topK: number;
 	#mmrLambda: number;
@@ -201,6 +215,7 @@ export class PassiveHydrator {
 	constructor(options: PassiveHydratorOptions) {
 		this.#store = options.store;
 		this.#license = options.license;
+		this.#sessionId = options.sessionId ?? "unknown";
 		this.#topK = options.topK ?? DEFAULT_TOP_K;
 		this.#mmrLambda = options.mmrLambda ?? DEFAULT_RECALL_MMR_LAMBDA;
 		this.#cache = new CosineCache(options.cosineThreshold ?? DEFAULT_COSINE_THRESHOLD);
@@ -258,7 +273,7 @@ export class PassiveHydrator {
 		// 3. Check cosine cache
 		const cacheResult = this.#cache.check(embedding);
 		if (cacheResult.hit) {
-			const text = formatHydratedContext(cacheResult.results);
+			const text = formatHydratedContext(cacheResult.results, this.#sessionId);
 			return {
 				text,
 				results: cacheResult.results,
@@ -291,7 +306,7 @@ export class PassiveHydrator {
 		this.#cache.update(embedding, topResults);
 
 		// 7. Format
-		const text = formatHydratedContext(topResults);
+		const text = formatHydratedContext(topResults, this.#sessionId);
 		const durationMs = Date.now() - start;
 
 		logger.debug("PassiveHydrator: hydration complete", {

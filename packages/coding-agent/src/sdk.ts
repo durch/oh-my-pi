@@ -1394,6 +1394,7 @@ export async function createAgentSession(options: CreateAgentSessionOptions = {}
 		passiveHydrator = new PassiveHydrator({
 			store: recallStore,
 			license: memexLicense,
+			sessionId,
 		});
 		logger.debug("Recall pipeline initialized (ingest + passive hydration)");
 	}

@@ -17,12 +17,34 @@
 
 import type { AgentMessage } from "@oh-my-pi/pi-agent-core";
 import type { TextContent, ToolResultMessage } from "@oh-my-pi/pi-ai";
+import { parseMCPToolName } from "../../mcp/tool-bridge";
 import type { MemoryAssemblyBudget } from "../memory-contract";
 import type { BudgetDerivationInput } from "./types";
 
 // ═══════════════════════════════════════════════════════════════════════════
 // Token estimation & budget derivation
 // ═══════════════════════════════════════════════════════════════════════════
+
+/**
+ * Extract source provenance tags from messages in a turn.
+ * For tool_result messages, derives the source from toolName.
+ * MCP tools get "mcp:serverName", builtins get "tool:toolName".
+ */
+function extractSourceTags(messages: AgentMessage[]): string[] {
+	const tags = new Set<string>();
+	for (const msg of messages) {
+		if (msg.role !== "toolResult") continue;
+		const toolName = (msg as { toolName?: string }).toolName;
+		if (!toolName) continue;
+		const mcpParts = parseMCPToolName(toolName);
+		if (mcpParts) {
+			tags.add(`mcp:${mcpParts.serverName}`);
+		} else {
+			tags.add(`tool:${toolName}`);
+		}
+	}
+	return [...tags];
+}
 
 function estimateTokensFromCharCount(chars: number): number {
 	return Math.ceil(chars / 4);
@@ -94,6 +116,12 @@ export const DEFAULT_HOT_WINDOW_TURNS = 3;
 /** Stub text injected into tool_result messages beyond the hot window. */
 export const TOOL_RESULT_STUB_TEXT = "[Content available in assembled context]";
 
+/** Format stub text with source provenance tags. */
+export function formatStubText(sourceTags?: string[]): string {
+	if (!sourceTags || sourceTags.length === 0) return TOOL_RESULT_STUB_TEXT;
+	return `[source: ${sourceTags.join(", ")} | Content replaced \u2014 available via re-execution]`;
+}
+
 export interface MessageTransformOptions {
 	/** Number of recent turns to keep verbatim (default: {@link DEFAULT_HOT_WINDOW_TURNS}). */
 	hotWindowTurns?: number;
@@ -154,6 +182,9 @@ export interface TurnDecision {
 
 	/** Estimated tokens after transformation (0 if dropped). */
 	tokensAfter: number;
+
+	/** Source provenance tags for tools in this turn (e.g. "tool:grep", "mcp:rna-server"). Empty for non-tool turns. */
+	sourceTags: string[];
 }
 
 /**
@@ -294,13 +325,14 @@ export function segmentIntoTurns(messages: AgentMessage[]): Turn[] {
  * Returns a new array of messages with tool_result content replaced.
  * Assistant messages and other message types are passed through unchanged.
  */
-function replaceToolResultContent(turn: Turn): Turn {
+function replaceToolResultContent(turn: Turn, sourceTags?: string[]): Turn {
 	if (!turn.hasToolResults) return turn;
 
+	const stubText = formatStubText(sourceTags);
 	const replaced = turn.messages.map((msg): AgentMessage => {
 		if (msg.role !== "toolResult") return msg;
 
-		const stubContent: TextContent[] = [{ type: "text", text: TOOL_RESULT_STUB_TEXT }];
+		const stubContent: TextContent[] = [{ type: "text", text: stubText }];
 		return {
 			...msg,
 			content: stubContent,
@@ -406,7 +438,8 @@ export function transformMessages(messages: AgentMessage[], options: MessageTran
 
 	const transformedTurns = originalTurns.map((turn, idx) => {
 		if (idx >= hotWindowStart) return turn; // hot window: keep verbatim
-		return replaceToolResultContent(turn);
+		const tags = extractSourceTags(turn.messages);
+		return replaceToolResultContent(turn, tags);
 	});
 
 	// Pre-compute transformed token costs (only differs from original for stubbed turns)
@@ -432,6 +465,8 @@ export function transformMessages(messages: AgentMessage[], options: MessageTran
 		const tokensBefore = originalTokens[i];
 		totalTokensBefore += tokensBefore;
 
+		const sourceTags = extractSourceTags(originalTurns[i].messages);
+
 		if (i < dropCount) {
 			// Dropped for budget
 			decisions.push({
@@ -442,6 +477,7 @@ export function transformMessages(messages: AgentMessage[], options: MessageTran
 				hasToolResults: originalTurns[i].hasToolResults,
 				tokensBefore,
 				tokensAfter: 0,
+				sourceTags,
 			});
 			droppedCount++;
 		} else if (i >= hotWindowStart) {
@@ -454,6 +490,7 @@ export function transformMessages(messages: AgentMessage[], options: MessageTran
 				hasToolResults: originalTurns[i].hasToolResults,
 				tokensBefore,
 				tokensAfter: tokensBefore,
+				sourceTags,
 			});
 			totalTokensAfter += tokensBefore;
 			keptCount++;
@@ -468,6 +505,7 @@ export function transformMessages(messages: AgentMessage[], options: MessageTran
 				hasToolResults: true,
 				tokensBefore,
 				tokensAfter,
+				sourceTags,
 			});
 			totalTokensAfter += tokensAfter;
 			stubbedCount++;
@@ -481,6 +519,7 @@ export function transformMessages(messages: AgentMessage[], options: MessageTran
 				hasToolResults: false,
 				tokensBefore,
 				tokensAfter: tokensBefore,
+				sourceTags,
 			});
 			totalTokensAfter += tokensBefore;
 			keptCount++;

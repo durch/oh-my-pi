@@ -5,6 +5,7 @@
  * and invalidation rules in the bridge.
  */
 
+import { parseMCPToolName } from "../../mcp/tool-bridge";
 import type { MemoryFreshnessPolicy, MemoryLocatorRetrievalMethod, MemoryLocatorTrustLevel } from "../memory-contract";
 import { CATEGORY_FRESHNESS, type ResultProfile, type ToolResultCategory } from "./types";
 
@@ -193,7 +194,7 @@ export function classifyResult(
 	// For mutation tools, add touched paths as invalidation targets on lookup/read entries
 	// This is applied during locator generation in the bridge, not here.
 
-	return {
+	const profile: ResultProfile = {
 		toolName,
 		category,
 		trust,
@@ -203,4 +204,12 @@ export function classifyResult(
 		hasArtifact: hasArtifactReference(result),
 		isError,
 	};
+
+	// Detect MCP tools and extract server name
+	const mcpParts = parseMCPToolName(toolName);
+	if (mcpParts) {
+		return { ...profile, mcpServerName: mcpParts.serverName };
+	}
+
+	return profile;
 }

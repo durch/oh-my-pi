@@ -87,6 +87,7 @@ function makeTransformMetadata(overrides?: Partial<TransformMetadata>): Transfor
 				hasToolResults: false,
 				tokensBefore: 50,
 				tokensAfter: 50,
+				sourceTags: [],
 			},
 		],
 		totalTurns: 1,

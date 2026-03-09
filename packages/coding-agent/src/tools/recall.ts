@@ -6,6 +6,7 @@ import { embed } from "../context/recall/embed";
 import { mmrRerank } from "../context/recall/mmr";
 import type { RecallStore } from "../context/recall/store";
 import type { MmrCandidate, RecallSearchResult } from "../context/recall/types";
+import { parseMCPToolName } from "../mcp/tool-bridge";
 import recallDescription from "../prompts/tools/recall.md" with { type: "text" };
 import type { ToolSession } from ".";
 import { shortenPath } from "./render-utils";
@@ -43,17 +44,20 @@ export class RecallTool implements AgentTool<typeof recallSchema> {
 	#store: RecallStore;
 	#license: string;
 	#cwd: string;
+	#sessionId: string;
 
-	constructor(store: RecallStore, license: string, cwd: string) {
+	constructor(store: RecallStore, license: string, cwd: string, sessionId: string) {
 		this.description = renderPromptTemplate(recallDescription);
 		this.#store = store;
 		this.#license = license;
 		this.#cwd = cwd;
+		this.#sessionId = sessionId;
 	}
 
 	static createIf(session: ToolSession): RecallTool | null {
 		if (!session.recallStore || !session.memexLicense) return null;
-		return new RecallTool(session.recallStore, session.memexLicense, session.cwd);
+		const sessionId = session.getSessionId?.() ?? "unknown";
+		return new RecallTool(session.recallStore, session.memexLicense, session.cwd, sessionId);
 	}
 
 	async execute(_toolCallId: string, params: RecallParams, _signal?: AbortSignal): Promise<AgentToolResult> {
@@ -117,7 +121,7 @@ export class RecallTool implements AgentTool<typeof recallSchema> {
 		const topResults = reranked.slice(0, limit);
 
 		// Step 6: Format results
-		const formatted = topResults.map(r => formatResult(r.data)).join("\n\n---\n\n");
+		const formatted = topResults.map(r => formatResult(r.data, this.#sessionId)).join("\n\n---\n\n");
 
 		logger.debug("Recall: returned results", {
 			query: params.query.slice(0, 80),
@@ -131,11 +135,26 @@ export class RecallTool implements AgentTool<typeof recallSchema> {
 	}
 }
 
-function formatResult(r: RecallSearchResult): string {
-	// Header: Turn N [role: tool_name] project: /path paths: x, y
+function formatResult(r: RecallSearchResult, currentSessionId: string): string {
+	// Header: Turn N [role: tool_name] source: <tag> session: <age> project: /path paths: x, y
 	let header = `Turn ${r.turn} [${r.role}`;
 	if (r.tool_name) header += `: ${r.tool_name}`;
 	header += "]";
+
+	// Source tag
+	if (r.tool_name) {
+		const mcpParts = parseMCPToolName(r.tool_name);
+		if (mcpParts) {
+			header += ` source: mcp:${mcpParts.serverName}`;
+		} else {
+			header += ` source: tool:${r.tool_name}`;
+		}
+	} else {
+		header += ` source: ${r.role}`;
+	}
+
+	// Session age
+	header += ` session: ${r.session_id === currentSessionId ? "current" : "other"}`;
 
 	if (r.project_cwd) {
 		header += ` project: ${shortenPath(r.project_cwd)}`;

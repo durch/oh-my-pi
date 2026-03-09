@@ -62,6 +62,8 @@ export interface ResultProfile {
 	hasArtifact: boolean;
 	/** Whether the tool execution was an error. */
 	isError: boolean;
+	/** MCP server name if this is an MCP tool (parsed from compound name). */
+	mcpServerName?: string;
 }
 
 // ═══════════════════════════════════════════════════════════════════════════

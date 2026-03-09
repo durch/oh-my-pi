@@ -36,6 +36,7 @@ function makeDecision(turnIndex: number, action: TurnDecision["action"], reason:
 		hasToolResults: action === "stubbed",
 		tokensBefore: 1000,
 		tokensAfter: action === "dropped" ? 0 : action === "stubbed" ? 200 : 1000,
+		sourceTags: [],
 	};
 }
 
