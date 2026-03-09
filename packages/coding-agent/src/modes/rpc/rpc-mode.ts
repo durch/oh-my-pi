@@ -14,12 +14,12 @@ import { readJsonl, Snowflake } from "@oh-my-pi/pi-utils";
 import type { ExtensionUIContext, ExtensionUIDialogOptions } from "../../extensibility/extensions";
 import { type Theme, theme } from "../../modes/theme/theme";
 import type { AgentSession } from "../../session/agent-session";
-import { buildIntrospectionSnapshot } from "./rpc-introspection";
 import {
 	buildPromptDecisionReport,
 	buildPromptSectionDetail,
 	buildPromptSnapshotOverview,
 } from "./prompt-snapshot-inspector";
+import { buildIntrospectionSnapshot } from "./rpc-introspection";
 import type {
 	RpcCommand,
 	RpcExtensionUIRequest,
@@ -671,7 +671,11 @@ export async function runRpcMode(session: AgentSession): Promise<never> {
 			case "inspect_prompt_section": {
 				const detail = buildPromptSectionDetail(session.lastPromptSnapshot, command.section);
 				if (!detail) {
-					return error(id, "inspect_prompt_section", `Section "${command.section}" is not available in the current snapshot`);
+					return error(
+						id,
+						"inspect_prompt_section",
+						`Section "${command.section}" is not available in the current snapshot`,
+					);
 				}
 				return success(id, "inspect_prompt_section", detail);
 			}
