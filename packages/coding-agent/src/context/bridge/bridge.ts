@@ -193,7 +193,7 @@ export class ToolResultBridge {
 		}
 
 		const provenance: MemoryProvenance = {
-			source: `tool:${profile.toolName}`,
+			source: profile.mcpServerName ? `mcp:${profile.mcpServerName}` : `tool:${profile.toolName}`,
 			reason: profile.isError ? "error-observation" : "result-observation",
 			capturedAt: now,
 			confidence: profile.isError ? 0.5 : 0.9,

@@ -100,7 +100,7 @@ describe("RecallTool.execute", () => {
 
 	test("returns empty message when store is empty", async () => {
 		const store = await createStoreWithRows([]);
-		const _tool = new RecallTool(store, "fake-license", "/tmp/test-project");
+		const _tool = new RecallTool(store, "fake-license", "/tmp/test-project", "test-session");
 
 		// We need to mock embed to avoid hitting the real API.
 		// Instead of mocking, let's test the store.search path directly

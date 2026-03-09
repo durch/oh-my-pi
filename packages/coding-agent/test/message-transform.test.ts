@@ -3,6 +3,7 @@ import type { AgentMessage } from "@oh-my-pi/pi-agent-core";
 import type { AssistantMessage, DeveloperMessage, ToolResultMessage, UserMessage } from "@oh-my-pi/pi-ai";
 import {
 	DEFAULT_HOT_WINDOW_TURNS,
+	formatStubText,
 	segmentIntoTurns,
 	TOOL_RESULT_STUB_TEXT,
 	transformMessages,
@@ -232,8 +233,8 @@ describe("transformMessages — hot window", () => {
 		expect(toolResults).toHaveLength(4);
 
 		// First two tool_results (old) should have stub content
-		expect(toolResults[0].content).toEqual([{ type: "text", text: TOOL_RESULT_STUB_TEXT }]);
-		expect(toolResults[1].content).toEqual([{ type: "text", text: TOOL_RESULT_STUB_TEXT }]);
+		expect(toolResults[0].content).toEqual([{ type: "text", text: formatStubText(["tool:read"]) }]);
+		expect(toolResults[1].content).toEqual([{ type: "text", text: formatStubText(["tool:read"]) }]);
 
 		// Last two tool_results (hot window) should keep original content
 		expect(toolResults[2].content).toEqual([{ type: "text", text: "recent edit result" }]);
@@ -253,7 +254,7 @@ describe("transformMessages — hot window", () => {
 		const toolResults = result.filter((m): m is ToolResultMessage => m.role === "toolResult");
 
 		// Only the last tool_result should be verbatim
-		expect(toolResults[0].content).toEqual([{ type: "text", text: TOOL_RESULT_STUB_TEXT }]);
+		expect(toolResults[0].content).toEqual([{ type: "text", text: formatStubText(["tool:read"]) }]);
 		expect(toolResults[1].content).toEqual([{ type: "text", text: "content B" }]);
 	});
 
@@ -294,7 +295,7 @@ describe("transformMessages — hot window", () => {
 		)!;
 
 		expect(replacedTr.details).toBeUndefined();
-		expect(replacedTr.content).toEqual([{ type: "text", text: TOOL_RESULT_STUB_TEXT }]);
+		expect(replacedTr.content).toEqual([{ type: "text", text: formatStubText(["tool:read"]) }]);
 	});
 
 	test("tool_use/tool_result pairing preserved after transform", () => {
@@ -417,7 +418,7 @@ describe("transformMessages — budget bounding", () => {
 
 		// Verify the old tool_result was replaced
 		const oldTr = result.find((m): m is ToolResultMessage => m.role === "toolResult" && m.toolCallId === "tc-1")!;
-		expect(oldTr.content).toEqual([{ type: "text", text: TOOL_RESULT_STUB_TEXT }]);
+		expect(oldTr.content).toEqual([{ type: "text", text: formatStubText(["tool:read"]) }]);
 	});
 });
 
@@ -460,7 +461,7 @@ describe("transformMessages — edge cases", () => {
 
 		// All three should be replaced
 		for (const tr of toolResults) {
-			expect(tr.content).toEqual([{ type: "text", text: TOOL_RESULT_STUB_TEXT }]);
+			expect(tr.content).toEqual([{ type: "text", text: formatStubText(["tool:read"]) }]);
 		}
 	});
 
@@ -476,7 +477,7 @@ describe("transformMessages — edge cases", () => {
 
 		const { messages: result } = transformMessages(messages, { hotWindowTurns: 0 });
 		const tr = result.find((m): m is ToolResultMessage => m.role === "toolResult")!;
-		expect(tr.content).toEqual([{ type: "text", text: TOOL_RESULT_STUB_TEXT }]);
+		expect(tr.content).toEqual([{ type: "text", text: formatStubText(["tool:read"]) }]);
 	});
 
 	test("non-tool messages are never modified", () => {
@@ -514,7 +515,7 @@ describe("transformMessages — edge cases", () => {
 		expect(tr.isError).toBe(true);
 		expect(tr.toolCallId).toBe("tc-1");
 		expect(tr.toolName).toBe("bash");
-		expect(tr.content).toEqual([{ type: "text", text: TOOL_RESULT_STUB_TEXT }]);
+		expect(tr.content).toEqual([{ type: "text", text: formatStubText(["tool:bash"]) }]);
 	});
 
 	test("timestamp preserved on replaced tool_result", () => {
@@ -771,5 +772,125 @@ describe("transformMessages — decision metadata", () => {
 		expect(toolTurn.action).toBe("dropped");
 		expect(toolTurn.reason).toBe("budget-exceeded");
 		expect(toolTurn.tokensAfter).toBe(0);
+	});
+});
+
+// ═══════════════════════════════════════════════════════════════════════════
+// Source provenance tags
+// ═══════════════════════════════════════════════════════════════════════════
+
+describe("formatStubText", () => {
+	test("returns default stub when no source tags", () => {
+		expect(formatStubText()).toBe(TOOL_RESULT_STUB_TEXT);
+		expect(formatStubText([])).toBe(TOOL_RESULT_STUB_TEXT);
+	});
+
+	test("includes single source tag", () => {
+		const stub = formatStubText(["tool:grep"]);
+		expect(stub).toContain("source: tool:grep");
+		expect(stub).toContain("Content replaced");
+	});
+
+	test("includes multiple source tags", () => {
+		const stub = formatStubText(["tool:read", "tool:grep"]);
+		expect(stub).toContain("source: tool:read, tool:grep");
+	});
+
+	test("includes MCP source tag", () => {
+		const stub = formatStubText(["mcp:rna"]);
+		expect(stub).toContain("source: mcp:rna");
+	});
+});
+
+describe("TurnDecision sourceTags", () => {
+	test("tool_result turns get source tags from toolName", () => {
+		const messages: AgentMessage[] = [
+			makeUser("start"),
+			makeAssistant([{ id: "tc-1", name: "read" }]),
+			makeToolResult("tc-1", "content"),
+			makeUser("end"),
+		];
+
+		const { metadata } = transformMessages(messages, { hotWindowTurns: 1 });
+		// Turn 0: user, Turn 1: assistant+tool_result, Turn 2: user
+		const toolTurn = metadata.decisions.find(d => d.hasToolResults)!;
+		expect(toolTurn.sourceTags).toEqual(["tool:read"]);
+	});
+
+	test("non-tool turns have empty sourceTags", () => {
+		const messages: AgentMessage[] = [makeUser("hello"), makeAssistant(), makeUser("end")];
+
+		const { metadata } = transformMessages(messages);
+		for (const decision of metadata.decisions) {
+			expect(decision.sourceTags).toEqual([]);
+		}
+	});
+
+	test("MCP tool results get mcp: source tag", () => {
+		const mcpResult: ToolResultMessage = {
+			role: "toolResult",
+			toolCallId: "tc-mcp-1",
+			toolName: "mcp_rna_search_symbols",
+			content: [{ type: "text", text: "symbols found" }],
+			isError: false,
+			timestamp: nextTimestamp(),
+		};
+
+		const messages: AgentMessage[] = [
+			makeAssistant([{ id: "tc-mcp-1", name: "mcp_rna_search_symbols" }]),
+			mcpResult,
+			makeUser("next"),
+		];
+
+		const { metadata } = transformMessages(messages, { hotWindowTurns: 1 });
+		const toolTurn = metadata.decisions.find(d => d.hasToolResults)!;
+		expect(toolTurn.sourceTags).toEqual(["mcp:rna"]);
+	});
+
+	test("sourceTags survive stubbing", () => {
+		const messages: AgentMessage[] = [
+			makeAssistant([{ id: "tc-1", name: "read" }]),
+			makeToolResult("tc-1", "original content"),
+			makeUser("a"),
+			makeUser("b"),
+			makeUser("c"),
+		];
+
+		const { metadata } = transformMessages(messages, { hotWindowTurns: 3 });
+		const stubbedTurn = metadata.decisions.find(d => d.action === "stubbed")!;
+		// Source tags must persist even though content was stubbed
+		expect(stubbedTurn.sourceTags).toEqual(["tool:read"]);
+	});
+
+	test("sourceTags survive budget-dropping", () => {
+		const messages: AgentMessage[] = [
+			makeAssistant([{ id: "tc-1", name: "bash" }]),
+			makeLargeToolResult("tc-1", 40000, "bash"),
+			makeUser("end"),
+		];
+
+		const { metadata } = transformMessages(messages, { hotWindowTurns: 1, maxTokens: 100 });
+		const droppedTurn = metadata.decisions.find(d => d.action === "dropped");
+		if (droppedTurn) {
+			// Source tags must persist even when dropped for budget
+			expect(droppedTurn.sourceTags).toEqual(["tool:bash"]);
+		}
+	});
+
+	test("multiple tools in one turn are deduplicated", () => {
+		const messages: AgentMessage[] = [
+			makeAssistant([
+				{ id: "tc-1", name: "read" },
+				{ id: "tc-2", name: "read" },
+			]),
+			makeToolResult("tc-1", "file A"),
+			makeToolResult("tc-2", "file B"),
+			makeUser("end"),
+		];
+
+		const { metadata } = transformMessages(messages, { hotWindowTurns: 1 });
+		const toolTurn = metadata.decisions.find(d => d.hasToolResults)!;
+		// Two read tool results → deduplicated to single tag
+		expect(toolTurn.sourceTags).toEqual(["tool:read"]);
 	});
 });

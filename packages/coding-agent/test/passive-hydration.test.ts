@@ -338,3 +338,71 @@ describe("formatHydratedContext", () => {
 		expect(closeCount).toBe(2);
 	});
 });
+
+// ═══════════════════════════════════════════════════════════════════════════
+// Source provenance and session age
+// ═══════════════════════════════════════════════════════════════════════════
+
+describe("formatHydratedContext — source provenance", () => {
+	test("adds source=tool:name for regular tool results", () => {
+		const results = [makeSearchResult({ text: "grep output", role: "tool_result", tool_name: "grep", turn: 5 })];
+		const formatted = formatHydratedContext(results)!;
+		expect(formatted).toContain('source="tool:grep"');
+	});
+
+	test("adds source=mcp:serverName for MCP tool results", () => {
+		const results = [
+			makeSearchResult({
+				text: "RNA results",
+				role: "tool_result",
+				tool_name: "mcp_rna_search_symbols",
+				turn: 7,
+			}),
+		];
+		const formatted = formatHydratedContext(results)!;
+		expect(formatted).toContain('source="mcp:rna"');
+	});
+
+	test("adds source=role for non-tool results", () => {
+		const results = [makeSearchResult({ text: "user said hello", role: "user", tool_name: null, turn: 1 })];
+		const formatted = formatHydratedContext(results)!;
+		expect(formatted).toContain('source="user"');
+	});
+
+	test("adds session=current when sessionId matches", () => {
+		const results = [makeSearchResult({ text: "recent", session_id: "session-42", turn: 1 })];
+		const formatted = formatHydratedContext(results, "session-42")!;
+		expect(formatted).toContain('session="current"');
+	});
+
+	test("adds session=other when sessionId differs", () => {
+		const results = [makeSearchResult({ text: "old data", session_id: "session-old", turn: 1 })];
+		const formatted = formatHydratedContext(results, "session-new")!;
+		expect(formatted).toContain('session="other"');
+	});
+
+	test("omits session attribute when no currentSessionId provided", () => {
+		const results = [makeSearchResult({ text: "data", turn: 1 })];
+		const formatted = formatHydratedContext(results)!;
+		expect(formatted).not.toContain("session=");
+	});
+
+	test("all attributes present together", () => {
+		const results = [
+			makeSearchResult({
+				text: "search results",
+				role: "tool_result",
+				tool_name: "mcp_memex_query",
+				session_id: "sess-1",
+				turn: 3,
+			}),
+		];
+		const formatted = formatHydratedContext(results, "sess-1")!;
+
+		expect(formatted).toContain('turn="3"');
+		expect(formatted).toContain('role="tool_result"');
+		expect(formatted).toContain('tool="mcp_memex_query"');
+		expect(formatted).toContain('source="mcp:memex"');
+		expect(formatted).toContain('session="current"');
+	});
+});

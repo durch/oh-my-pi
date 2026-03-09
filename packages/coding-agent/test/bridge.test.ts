@@ -574,3 +574,60 @@ describe("extractPaths (via classify)", () => {
 		expect(result.touchedPaths).toEqual([]);
 	});
 });
+
+// ═══════════════════════════════════════════════════════════════════════════
+// MCP provenance tests
+// ═══════════════════════════════════════════════════════════════════════════
+
+describe("MCP provenance", () => {
+	describe("classifyResult", () => {
+		test("detects MCP tool and sets mcpServerName", () => {
+			const result = classifyResult("mcp_rna_search_symbols", {}, "results", false);
+			expect(result.mcpServerName).toBe("rna");
+			// MCP tools are unknown to TOOL_CATEGORY_MAP, so default to execution/heuristic
+			expect(result.category).toBe("execution");
+			expect(result.trust).toBe("heuristic");
+		});
+
+		test("detects MCP tool with multi-segment server name", () => {
+			const result = classifyResult("mcp_memex_query", {}, "data", false);
+			expect(result.mcpServerName).toBe("memex");
+		});
+
+		test("non-MCP tool has no mcpServerName", () => {
+			const result = classifyResult("read", { path: "a.ts" }, "content", false);
+			expect(result.mcpServerName).toBeUndefined();
+		});
+
+		test("non-MCP tool starting with mcp but not matching pattern has no mcpServerName", () => {
+			const result = classifyResult("mcp", {}, "data", false);
+			expect(result.mcpServerName).toBeUndefined();
+		});
+	});
+
+	describe("bridge locator provenance", () => {
+		test("MCP tool gets mcp:serverName source in provenance", () => {
+			const bridge = createTestBridge();
+			bridge.handleToolResult("mcp_rna_search_symbols", "call-mcp-1", {}, "results", false);
+
+			const locator = bridge.contract.locatorMap[0];
+			expect(locator.provenance.source).toBe("mcp:rna");
+		});
+
+		test("builtin tool gets tool:name source in provenance", () => {
+			const bridge = createTestBridge();
+			bridge.handleToolResult("grep", "call-builtin-1", { pattern: "TODO" }, "matches", false);
+
+			const locator = bridge.contract.locatorMap[0];
+			expect(locator.provenance.source).toBe("tool:grep");
+		});
+
+		test("unknown tool gets tool:name source (not mcp)", () => {
+			const bridge = createTestBridge();
+			bridge.handleToolResult("custom_tool", "call-custom-1", {}, "data", false);
+
+			const locator = bridge.contract.locatorMap[0];
+			expect(locator.provenance.source).toBe("tool:custom_tool");
+		});
+	});
+});

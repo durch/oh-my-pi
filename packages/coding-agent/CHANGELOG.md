@@ -5,6 +5,7 @@
 ### Added
 
 - Surface assembly metadata to the LLM as a compact developer message each turn, including turn composition (kept/stubbed/dropped counts with affected ranges) and budget usage with headroom ([#58](https://github.com/open-horizon-labs/oh-omp/issues/58))
+- Add source provenance tags to assembled context: MCP tool results are tagged `mcp:serverName`, builtin tools as `tool:name`, and recall results include session age signals ([#59](https://github.com/open-horizon-labs/oh-omp/issues/59))
 
 ## [13.9.10] - 2026-03-08
 ### Added
