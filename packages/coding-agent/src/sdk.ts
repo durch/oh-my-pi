@@ -872,6 +872,29 @@ export async function createAgentSession(options: CreateAgentSessionOptions = {}
 		: undefined;
 
 	const pendingActionStore = new PendingActionStore();
+	// Initialize recall store early so the recall tool can be created during tool setup.
+	// Both the recall tool and ingest pipeline share the same store instance.
+	let recallStore: RecallStore | undefined;
+	let memexLicense: string | undefined;
+	if (isShadowMode(settings) || isAssemblerActive(settings)) {
+		try {
+			memexLicense = await resolveMemexLicense();
+			recallStore = await RecallStore.open({
+				sessionDir: sessionManager.getSessionDir(),
+				sessionId: sessionManager.getSessionId(),
+			});
+			postmortem.register("recall-store-close", () => recallStore!.close());
+			logger.debug("RecallStore initialized for recall tool + ingest pipeline");
+		} catch (err) {
+			// No memex license or LanceDB init failure — recall is optional.
+			logger.debug("Recall infrastructure not available", {
+				error: err instanceof Error ? err.message : String(err),
+			});
+			recallStore = undefined;
+			memexLicense = undefined;
+		}
+	}
+
 	const toolSession: ToolSession = {
 		cwd,
 		hasUI: options.hasUI ?? false,
@@ -915,6 +938,8 @@ export async function createAgentSession(options: CreateAgentSessionOptions = {}
 		modelRegistry,
 		asyncJobManager,
 		pendingActionStore,
+		recallStore,
+		memexLicense,
 	};
 
 	// Initialize internal URL router for internal protocols (agent://, artifact://, memory://, skill://, rule://, mcp://, local://)
@@ -1404,28 +1429,15 @@ export async function createAgentSession(options: CreateAgentSessionOptions = {}
 		: undefined;
 
 	// Initialize recall ingest pipeline for assembler/shadow modes.
-	// RecallStore + IngestPipeline persist and embed all messages into LanceDB.
+	// Reuses the RecallStore + license initialized earlier (before tool creation).
 	let ingestPipeline: IngestPipeline | undefined;
-	if (assemblerBridge) {
-		try {
-			const license = await resolveMemexLicense();
-			const recallStore = await RecallStore.open({
-				sessionDir: sessionManager.getSessionDir(),
-				sessionId: sessionManager.getSessionId(),
-			});
-			ingestPipeline = new IngestPipeline({
-				store: recallStore,
-				license,
-				sessionId: sessionManager.getSessionId(),
-			});
-			postmortem.register("recall-store-close", () => recallStore.close());
-			logger.debug("Recall ingest pipeline initialized");
-		} catch (err) {
-			// No memex license or LanceDB init failure — recall is optional.
-			logger.debug("Recall ingest pipeline not available", {
-				error: err instanceof Error ? err.message : String(err),
-			});
-		}
+	if (assemblerBridge && recallStore && memexLicense) {
+		ingestPipeline = new IngestPipeline({
+			store: recallStore,
+			license: memexLicense,
+			sessionId: sessionManager.getSessionId(),
+		});
+		logger.debug("Recall ingest pipeline initialized");
 	}
 
 	// Build per-turn context transformer.
