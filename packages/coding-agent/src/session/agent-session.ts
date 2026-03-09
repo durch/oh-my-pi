@@ -50,8 +50,8 @@ import {
 import { abortableSleep, getAgentDbPath, isEnoent, logger } from "@oh-my-pi/pi-utils";
 import type { AsyncJob, AsyncJobManager } from "../async";
 import type { Rule } from "../capability/rule";
-import { MODEL_ROLE_IDS, type ModelRegistry, type ModelRole } from "../config/model-registry";
-import { extractExplicitThinkingSelector, parseModelString, resolveModelRoleValue } from "../config/model-resolver";
+import type { ModelRegistry, ModelRole } from "../config/model-registry";
+import { extractExplicitThinkingSelector, resolveModelRoleValue } from "../config/model-resolver";
 import { expandPromptTemplate, type PromptTemplate, renderPromptTemplate } from "../config/prompt-templates";
 import type { Settings, SkillsSettings } from "../config/settings";
 import type { ToolResultBridge } from "../context/bridge";
@@ -116,7 +116,6 @@ import {
 	generateBranchSummary,
 	prepareCompaction,
 } from "./compaction";
-import { DEFAULT_PRUNE_CONFIG, pruneToolOutputs } from "./compaction/pruning";
 import {
 	type BashExecutionMessage,
 	type BranchSummaryMessage,
@@ -261,7 +260,7 @@ interface HandoffOptions {
 
 /** Standard thinking levels */
 
-const AUTO_HANDOFF_THRESHOLD_FOCUS = renderPromptTemplate(autoHandoffThresholdFocusPrompt);
+const _AUTO_HANDOFF_THRESHOLD_FOCUS = renderPromptTemplate(autoHandoffThresholdFocusPrompt);
 
 const noOpUIContext: ExtensionUIContext = {
 	select: async (_title, _options, _dialogOptions) => undefined,
@@ -2922,25 +2921,6 @@ export class AgentSession {
 		this.settings.set("interruptMode", mode);
 	}
 
-	// =========================================================================
-	// Compaction
-	// =========================================================================
-
-	async #pruneToolOutputs(): Promise<{ prunedCount: number; tokensSaved: number } | undefined> {
-		const branchEntries = this.sessionManager.getBranch();
-		const result = pruneToolOutputs(branchEntries, DEFAULT_PRUNE_CONFIG);
-		if (result.prunedCount === 0) {
-			return undefined;
-		}
-
-		await this.sessionManager.rewriteEntries();
-		const sessionContext = this.sessionManager.buildSessionContext();
-		this.agent.replaceMessages(sessionContext.messages);
-		this.#syncTodoPhasesFromBranch();
-		this.#closeCodexProviderSessionsForHistoryRewrite();
-		return result;
-	}
-
 	/**
 	 * Manually compact the session context.
 	 * Aborts current agent operation first.
@@ -3462,52 +3442,6 @@ Be thorough - include exact file paths, function names, error messages, and tech
 		this.#scheduleAgentContinue({ generation: this.#promptGeneration });
 	}
 
-	/**
-	 * Attempt context promotion to a larger model.
-	 * Returns true if promotion succeeded (caller should retry without compacting).
-	 */
-	async #tryContextPromotion(assistantMessage: AssistantMessage): Promise<boolean> {
-		const promotionSettings = this.settings.getGroup("contextPromotion");
-		if (!promotionSettings.enabled) return false;
-		const currentModel = this.model;
-		if (!currentModel) return false;
-		if (assistantMessage.provider !== currentModel.provider || assistantMessage.model !== currentModel.id)
-			return false;
-		const contextWindow = currentModel.contextWindow ?? 0;
-		if (contextWindow <= 0) return false;
-		const targetModel = await this.#resolveContextPromotionTarget(currentModel, contextWindow);
-		if (!targetModel) return false;
-
-		try {
-			await this.setModelTemporary(targetModel);
-			logger.debug("Context promotion switched model on overflow", {
-				from: `${currentModel.provider}/${currentModel.id}`,
-				to: `${targetModel.provider}/${targetModel.id}`,
-			});
-			return true;
-		} catch (error) {
-			logger.warn("Context promotion failed", {
-				from: `${currentModel.provider}/${currentModel.id}`,
-				to: `${targetModel.provider}/${targetModel.id}`,
-				error: String(error),
-			});
-			return false;
-		}
-	}
-
-	async #resolveContextPromotionTarget(currentModel: Model, contextWindow: number): Promise<Model | undefined> {
-		const availableModels = this.#modelRegistry.getAvailable();
-		if (availableModels.length === 0) return undefined;
-
-		const candidate = this.#resolveContextPromotionConfiguredTarget(currentModel, availableModels);
-		if (!candidate) return undefined;
-		if (modelsAreEqual(candidate, currentModel)) return undefined;
-		if (candidate.contextWindow <= contextWindow) return undefined;
-		const apiKey = await this.#modelRegistry.getApiKey(candidate, this.sessionId);
-		if (!apiKey) return undefined;
-		return candidate;
-	}
-
 	#setModelWithProviderSessionReset(model: Model): void {
 		const currentModel = this.model;
 		if (currentModel) {
@@ -3541,10 +3475,6 @@ Be thorough - include exact file paths, function names, error messages, and tech
 		this.#providerSessionState.delete(providerKey);
 	}
 
-	#getModelKey(model: Model): string {
-		return `${model.provider}/${model.id}`;
-	}
-
 	#formatRoleModelValue(role: ModelRole, model: Model): string {
 		const modelKey = `${model.provider}/${model.id}`;
 		const existingRoleValue = this.settings.getModelRole(role);
@@ -3553,18 +3483,6 @@ Be thorough - include exact file paths, function names, error messages, and tech
 		const thinkingLevel = extractExplicitThinkingSelector(existingRoleValue, this.settings);
 		if (thinkingLevel === undefined) return modelKey;
 		return `${modelKey}:${thinkingLevel}`;
-	}
-	#resolveContextPromotionConfiguredTarget(currentModel: Model, availableModels: Model[]): Model | undefined {
-		const configuredTarget = currentModel.contextPromotionTarget?.trim();
-		if (!configuredTarget) return undefined;
-
-		const parsed = parseModelString(configuredTarget);
-		if (parsed) {
-			const explicitModel = availableModels.find(m => m.provider === parsed.provider && m.id === parsed.id);
-			if (explicitModel) return explicitModel;
-		}
-
-		return availableModels.find(m => m.provider === currentModel.provider && m.id === configuredTarget);
 	}
 
 	#resolveRoleModel(role: ModelRole, availableModels: Model[], currentModel: Model | undefined): Model | undefined {

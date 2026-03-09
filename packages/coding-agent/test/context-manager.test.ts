@@ -1,7 +1,6 @@
 import { describe, expect, it } from "bun:test";
 import { Settings } from "@oh-my-pi/pi-coding-agent/config/settings";
 import {
-	ContextManagerConfigError,
 	getContextManagerMode,
 	getContextManagerState,
 	isAssemblerActive,

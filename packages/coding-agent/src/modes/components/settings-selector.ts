@@ -286,7 +286,7 @@ export class SettingsSelectorComponent extends Container {
 		return settings.get(def.path);
 	}
 
-	#getSubmenuCurrentValue(path: SettingPath, value: unknown): string {
+	#getSubmenuCurrentValue(_path: SettingPath, value: unknown): string {
 		const rawValue = String(value ?? "");
 		return rawValue;
 	}
