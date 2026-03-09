@@ -25,6 +25,7 @@ import { ExtensionDashboard } from "../components/extensions";
 import { HistorySearchComponent } from "../components/history-search";
 import { ModelSelectorComponent } from "../components/model-selector";
 import { OAuthSelectorComponent } from "../components/oauth-selector";
+import { PromptInspector } from "../components/prompt-inspector";
 import { SessionSelectorComponent } from "../components/session-selector";
 import { SettingsSelectorComponent } from "../components/settings-selector";
 import { ToolExecutionComponent } from "../components/tool-execution";
@@ -190,6 +191,21 @@ export class SelectorController {
 				this.ctx.ui.requestRender();
 			};
 			return { component: dashboard, focus: dashboard };
+		});
+	}
+
+	/**
+	 * Show the Prompt Composition Inspector.
+	 */
+	showPromptInspector(): void {
+		const snapshot = this.ctx.session.lastPromptSnapshot;
+		const inspector = new PromptInspector(snapshot, this.ctx.ui.terminal.rows);
+		this.showSelector(done => {
+			inspector.onClose = () => {
+				done();
+				this.ctx.ui.requestRender();
+			};
+			return { component: inspector, focus: inspector };
 		});
 	}
 

@@ -173,6 +173,7 @@ export interface InteractiveModeContext {
 	showHistorySearch(): void;
 	showExtensionsDashboard(): void;
 	showAgentsDashboard(): void;
+	showPromptInspector(): void;
 	showModelSelector(options?: { temporaryOnly?: boolean }): void;
 	showUserMessageSelector(): void;
 	showTreeSelector(): void;
