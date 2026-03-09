@@ -776,6 +776,138 @@ describe("transformMessages — decision metadata", () => {
 });
 
 // ═══════════════════════════════════════════════════════════════════════════
+// transformMessages — front-drop API ordering
+// ═══════════════════════════════════════════════════════════════════════════
+
+describe("transformMessages — front-drop API ordering", () => {
+	test("no drops needed → no change, first message is user", () => {
+		const messages: AgentMessage[] = [
+			makeUser("hello"),
+			makeAssistant([{ id: "tc-1", name: "read" }]),
+			makeToolResult("tc-1", "content"),
+			makeUser("end"),
+		];
+		// Budget is generous, no drops
+		const { messages: result } = transformMessages(messages, { maxTokens: 100000, hotWindowTurns: 2 });
+		expect(result).toHaveLength(4);
+		expect(result[0].role).toBe("user");
+	});
+
+	test("budget drop leaves assistant at front → extends drop to next user turn", () => {
+		// Turn 0: user (small)      <- budget will drop this
+		// Turn 1: assistant + tool   <- would survive, starts with assistant → must also be dropped
+		// Turn 2: user (small)       <- should become the new first message
+		// Turn 3: user (hot window)
+		const messages: AgentMessage[] = [
+			makeUser("a".repeat(1000)), // ~250 tokens (Turn 0)
+			makeAssistant([{ id: "tc-1", name: "read" }]), // Turn 1
+			makeToolResult("tc-1", "b".repeat(1000)), // Turn 1 continued
+			makeUser("c".repeat(100)), // ~25 tokens (Turn 2)
+			makeUser("d".repeat(100)), // ~25 tokens (Turn 3, hot window)
+		];
+
+		// Budget: enough for turns 2+3 (~50 tokens) but not turn 0+1 (~500 tokens)
+		// Budget drop removes turn 0 (user), but that leaves turn 1 (assistant) at front.
+		// Fix must extend drop to also remove turn 1, making turn 2 (user) the front.
+		const { messages: result, metadata } = transformMessages(messages, { maxTokens: 100, hotWindowTurns: 1 });
+
+		// First surviving message must be user
+		expect(result[0].role).toBe("user");
+
+		// Both turn 0 and turn 1 should be dropped
+		expect(metadata.decisions[0].action).toBe("dropped");
+		expect(metadata.decisions[1].action).toBe("dropped");
+		expect(metadata.droppedCount).toBeGreaterThanOrEqual(2);
+	});
+
+	test("multiple consecutive non-user turns after drop → all dropped until user", () => {
+		// Turn 0: user (large)      <- budget drops this
+		// Turn 1: assistant + tool   <- non-user, also dropped
+		// Turn 2: assistant (no tool) <- non-user, also dropped
+		// Turn 3: user               <- becomes first message
+		// Turn 4: user (hot window)
+		const messages: AgentMessage[] = [
+			makeUser("a".repeat(2000)), // ~500 tokens (Turn 0)
+			makeAssistant([{ id: "tc-1", name: "read" }]), // Turn 1
+			makeToolResult("tc-1", "b".repeat(2000)), // Turn 1
+			makeAssistant(), // Turn 2 (no tools)
+			makeUser("small"), // Turn 3
+			makeUser("end"), // Turn 4 (hot window)
+		];
+
+		const { messages: result, metadata } = transformMessages(messages, { maxTokens: 100, hotWindowTurns: 1 });
+
+		expect(result[0].role).toBe("user");
+		expect(metadata.decisions[0].action).toBe("dropped");
+		expect(metadata.decisions[1].action).toBe("dropped");
+		expect(metadata.decisions[2].action).toBe("dropped");
+	});
+
+	test("all turns dropped except hot window → hot window preserved", () => {
+		// Turn 0: user (large)      <- dropped
+		// Turn 1: assistant + tool   <- dropped
+		// Turn 2: user (hot window)  <- kept
+		const messages: AgentMessage[] = [
+			makeUser("a".repeat(4000)), // ~1000 tokens (Turn 0)
+			makeAssistant([{ id: "tc-1", name: "read" }]), // Turn 1
+			makeLargeToolResult("tc-1", 4000), // Turn 1
+			makeUser("end"), // Turn 2 (hot window)
+		];
+
+		const { messages: result, metadata } = transformMessages(messages, { maxTokens: 50, hotWindowTurns: 1 });
+
+		// Hot window user message must survive
+		expect(result).toHaveLength(1);
+		expect(result[0].role).toBe("user");
+		expect((result[0] as UserMessage).content).toBe("end");
+		expect(metadata.droppedCount).toBe(2);
+	});
+
+	test("hot window starts with user → no issue", () => {
+		// All pre-hot-window turns dropped for budget, hot window starts with user
+		const messages: AgentMessage[] = [
+			makeUser("a".repeat(4000)), // Turn 0: dropped
+			makeUser("recent-1"), // Turn 1 (hot window)
+			makeAssistant([{ id: "tc-1", name: "read" }]), // Turn 2 (hot window)
+			makeToolResult("tc-1", "content"), // Turn 2 (hot window)
+			makeUser("recent-2"), // Turn 3 (hot window)
+		];
+
+		const { messages: result } = transformMessages(messages, { maxTokens: 50, hotWindowTurns: 3 });
+
+		// Hot window starts with user → OK
+		expect(result[0].role).toBe("user");
+		expect((result[0] as UserMessage).content).toBe("recent-1");
+	});
+
+	test("developer turn at front after drop → also dropped", () => {
+		// Turn 0: user (large)      <- budget drops this
+		// Turn 1: developer          <- non-user, also dropped
+		// Turn 2: user               <- becomes first message
+		// Turn 3: user (hot window)
+		const messages: AgentMessage[] = [
+			makeUser("a".repeat(2000)), // ~500 tokens (Turn 0)
+			makeDeveloper("context"), // Turn 1
+			makeUser("small"), // Turn 2
+			makeUser("end"), // Turn 3 (hot window)
+		];
+
+		const { messages: result } = transformMessages(messages, { maxTokens: 50, hotWindowTurns: 1 });
+
+		expect(result[0].role).toBe("user");
+	});
+
+	test("no budget → ordering fix not applied", () => {
+		// Without budget bounding, dropCount stays 0 and no ordering fix is needed
+		const messages: AgentMessage[] = [makeUser("hello"), makeAssistant(), makeUser("end")];
+
+		const { messages: result } = transformMessages(messages);
+		expect(result).toHaveLength(3);
+		expect(result[0].role).toBe("user");
+	});
+});
+
+// ═══════════════════════════════════════════════════════════════════════════
 // Source provenance tags
 // ═══════════════════════════════════════════════════════════════════════════
 

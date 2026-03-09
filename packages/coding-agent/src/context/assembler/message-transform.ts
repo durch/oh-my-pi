@@ -453,6 +453,16 @@ export function transformMessages(messages: AgentMessage[], options: MessageTran
 		dropCount = computeBudgetDropCount(transformedTokens, maxTokens, hotWindowTurns);
 	}
 
+	// 3b. Ensure surviving messages start with a user turn (Claude API requirement).
+	// When budget drops remove a user turn at the front, the next surviving turn
+	// may be an assistant turn. Extend drops until a user turn is at the front.
+	// Bounded by hotWindowStart — the hot window is inviolable.
+	if (dropCount > 0) {
+		while (dropCount < hotWindowStart && transformedTurns[dropCount].messages[0].role !== "user") {
+			dropCount++;
+		}
+	}
+
 	// 4. Build per-turn decision records
 	const decisions: TurnDecision[] = [];
 	let keptCount = 0;
