@@ -72,6 +72,10 @@ export interface PromptSnapshotBudget {
 	assembledContextTokens: number;
 	/** Remaining headroom in tokens. */
 	headroom: number;
+	/** Hard ceiling: maximum tokens allocatable to hydration. */
+	hydrationBudgetMax: number;
+	/** Guaranteed floor: minimum tokens reserved for messages. */
+	messageBudgetMin: number;
 }
 
 /**
@@ -186,6 +190,8 @@ export function captureEffectivePromptSnapshot(input: CaptureSnapshotInput): Eff
 					messageTokens,
 					assembledContextTokens,
 					headroom,
+					hydrationBudgetMax: input.assemblerBudget?.hydrationBudgetMax ?? 0,
+					messageBudgetMin: input.assemblerBudget?.messageBudgetMin ?? 0,
 				}
 			: null,
 	};

@@ -89,20 +89,24 @@ export function estimateToolDefinitionTokens(
 }
 
 const DEFAULT_MAX_LATENCY_MS = 2000;
-const BUDGET_SAFETY_MARGIN = 0.9;
+const DEFAULT_SAFETY_MARGIN_PERCENT = 5;
+const DEFAULT_MESSAGE_BUDGET_PERCENT = 50;
+const DEFAULT_HYDRATION_BUDGET_PERCENT = 50;
 
 export function deriveBudget(input: BudgetDerivationInput): MemoryAssemblyBudget {
+	const safetyPercent = input.safetyMarginPercent ?? DEFAULT_SAFETY_MARGIN_PERCENT;
+	const messagePercent = input.messageBudgetPercent ?? DEFAULT_MESSAGE_BUDGET_PERCENT;
+	const hydrationPercent = input.hydrationBudgetPercent ?? DEFAULT_HYDRATION_BUDGET_PERCENT;
+
 	const totalCosts = input.systemPromptTokens + input.toolDefinitionTokens + input.currentTurnTokens;
-	const rawAvailable = input.contextWindow - totalCosts;
-	const available = Math.max(0, Math.floor(rawAvailable * BUDGET_SAFETY_MARGIN));
+	const safetyReserve = Math.floor((input.contextWindow * safetyPercent) / 100);
+	const allocatable = Math.max(0, input.contextWindow - totalCosts - safetyReserve);
+
 	return {
-		maxTokens: available,
+		maxTokens: allocatable,
 		maxLatencyMs: DEFAULT_MAX_LATENCY_MS,
-		reservedTokens: {
-			objective: 0,
-			codeContext: 0,
-			executionState: 0,
-		},
+		hydrationBudgetMax: Math.floor((allocatable * hydrationPercent) / 100),
+		messageBudgetMin: Math.floor((allocatable * messagePercent) / 100),
 	};
 }
 
