@@ -302,6 +302,8 @@ export interface RpcPromptSnapshotBudget {
 	messageTokens: number;
 	assembledContextTokens: number;
 	headroom: number;
+	hydrationBudgetMax: number;
+	messageBudgetMin: number;
 }
 
 /** Report on turn-level composition decisions. */

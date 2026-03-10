@@ -84,6 +84,8 @@ describe("formatAssemblySummary", () => {
 			messageTokens: 50_000,
 			assembledContextTokens: 0,
 			headroom: 142_000,
+			hydrationBudgetMax: 0,
+			messageBudgetMin: 0,
 		};
 		const result = formatAssemblySummary(makeSnapshot({ budget }));
 		expect(result).toContain("Budget:");
@@ -108,6 +110,8 @@ describe("formatAssemblySummary", () => {
 			messageTokens: 50_000,
 			assembledContextTokens: 0,
 			headroom: 142_000,
+			hydrationBudgetMax: 0,
+			messageBudgetMin: 0,
 		};
 		const result = formatAssemblySummary(makeSnapshot({ meta, budget }))!;
 		expect(result).toStartWith("[Assembly: ");
@@ -165,6 +169,8 @@ describe("formatAssemblySummary", () => {
 			messageTokens: 100_000,
 			assembledContextTokens: 5_000,
 			headroom: 17_000,
+			hydrationBudgetMax: 0,
+			messageBudgetMin: 0,
 		};
 		const result = formatAssemblySummary(makeSnapshot({ meta: null, budget }))!;
 		expect(result).toStartWith("[Assembly: Budget:");
@@ -180,6 +186,8 @@ describe("formatAssemblySummary", () => {
 			messageTokens: 0,
 			assembledContextTokens: 0,
 			headroom: 0,
+			hydrationBudgetMax: 0,
+			messageBudgetMin: 0,
 		};
 		const result = formatAssemblySummary(makeSnapshot({ meta: null, budget }));
 		expect(result).toBeNull();

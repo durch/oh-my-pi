@@ -140,11 +140,10 @@ export interface ShortTermMemoryRecord {
 export interface MemoryAssemblyBudget {
 	maxTokens: number;
 	maxLatencyMs: number;
-	reservedTokens: {
-		objective: number;
-		codeContext: number;
-		executionState: number;
-	};
+	/** Hard ceiling: maximum tokens allocatable to hydration (recalled context). */
+	hydrationBudgetMax: number;
+	/** Guaranteed floor: minimum tokens reserved for conversation messages. */
+	messageBudgetMin: number;
 }
 
 /**

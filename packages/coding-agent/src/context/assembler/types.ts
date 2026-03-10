@@ -29,4 +29,10 @@ export interface BudgetDerivationInput {
 	toolDefinitionTokens: number;
 	/** Estimated tokens consumed by current-turn messages. */
 	currentTurnTokens: number;
+	/** Percentage of context window held as safety reserve (0-100, default: 5). */
+	safetyMarginPercent?: number;
+	/** Guaranteed minimum percentage of allocatable budget for messages (0-100, default: 50). */
+	messageBudgetPercent?: number;
+	/** Hard cap on hydration as percentage of allocatable budget (0-100, default: 50). */
+	hydrationBudgetPercent?: number;
 }

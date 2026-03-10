@@ -460,7 +460,8 @@ describe("ToolResultBridge.rebuildWorkingMemory", () => {
 	const testBudget: MemoryAssemblyBudget = {
 		maxTokens: 50_000,
 		maxLatencyMs: 2000,
-		reservedTokens: { objective: 0, codeContext: 0, executionState: 0 },
+		hydrationBudgetMax: 0,
+		messageBudgetMin: 0,
 	};
 
 	test("populates contract.working from STM state", () => {

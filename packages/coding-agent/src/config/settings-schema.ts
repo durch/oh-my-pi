@@ -341,6 +341,51 @@ export const SETTINGS_SCHEMA = {
 		},
 	},
 
+	"assembler.safetyMarginPercent": {
+		type: "number",
+		default: 5,
+		ui: {
+			tab: "agent",
+			label: "Safety margin %",
+			description: "Percentage of context window held as safety reserve (0-100)",
+			submenu: true,
+			condition: "isAssemblerMode",
+		},
+	},
+	"assembler.messageBudgetPercent": {
+		type: "number",
+		default: 50,
+		ui: {
+			tab: "agent",
+			label: "Message budget %",
+			description: "Guaranteed minimum percentage of allocatable budget for messages (0-100)",
+			submenu: true,
+			condition: "isAssemblerMode",
+		},
+	},
+	"assembler.hydrationBudgetPercent": {
+		type: "number",
+		default: 50,
+		ui: {
+			tab: "agent",
+			label: "Hydration budget %",
+			description: "Hard cap on hydration as percentage of allocatable budget (0-100)",
+			submenu: true,
+			condition: "isAssemblerMode",
+		},
+	},
+	"assembler.hotWindowTurns": {
+		type: "number",
+		default: 4,
+		ui: {
+			tab: "agent",
+			label: "Hot window turns",
+			description: "Number of recent turns always kept in full (0-20)",
+			submenu: true,
+			condition: "isAssemblerMode",
+		},
+	},
+
 	// ─────────────────────────────────────────────────────────────────────────
 	// Secrets settings
 	// ─────────────────────────────────────────────────────────────────────────
@@ -1409,6 +1454,13 @@ export interface ContextManagerSettings {
 	mode: "legacy" | "shadow" | "assembler";
 }
 
+export interface AssemblerSettings {
+	safetyMarginPercent: number;
+	messageBudgetPercent: number;
+	hydrationBudgetPercent: number;
+	hotWindowTurns: number;
+}
+
 /** Map group prefix -> typed settings interface */
 export interface GroupTypeMap {
 	compaction: CompactionSettings;
@@ -1425,6 +1477,7 @@ export interface GroupTypeMap {
 	stt: SttSettings;
 	modelRoles: Record<string, string>;
 	contextManager: ContextManagerSettings;
+	assembler: AssemblerSettings;
 }
 
 export type ContextManagerMode = SettingValue<"contextManager.mode">;

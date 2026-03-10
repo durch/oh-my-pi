@@ -108,7 +108,8 @@ function makePacket(overrides?: Partial<WorkingContextPacketV1>): WorkingContext
 		budget: {
 			maxTokens: 40_000,
 			maxLatencyMs: 2000,
-			reservedTokens: { objective: 0, codeContext: 0, executionState: 0 },
+			hydrationBudgetMax: 0,
+			messageBudgetMin: 0,
 		},
 		usage: { consumedTokens: 500, consumedLatencyMs: 100 },
 		fragments: [
@@ -379,7 +380,8 @@ describe("captureEffectivePromptSnapshot", () => {
 		const budget = {
 			maxTokens: 150_000,
 			maxLatencyMs: 2000,
-			reservedTokens: { objective: 0, codeContext: 0, executionState: 0 },
+			hydrationBudgetMax: 0,
+			messageBudgetMin: 0,
 		};
 
 		const input = makeInput({
