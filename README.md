@@ -381,67 +381,25 @@ Supported platforms: `linux-x64`, `linux-arm64`, `darwin-x64`, `darwin-arm64`, `
 
 ## Installation
 
-### Via Bun (recommended)
+This is a fork of [oh-my-pi](https://github.com/can1357/oh-my-pi) with a context-assembly system. Install the fork package, not the upstream one.
 
-Requires [Bun](https://bun.sh) **>= 1.3.7**:
+### Via npm/bun
 
-```bash
-bun install -g @oh-my-pi/pi-coding-agent
-```
-
-### Via installer script
-
-**Linux / macOS:**
+Requires [Bun](https://bun.sh) **>= 1.3.7** or Node.js >= 20:
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/open-horizon-labs/oh-omp/main/scripts/install.sh | sh
-```
+# bun
+bun install -g @oh-labs/oh-omp
 
-**Windows (PowerShell):**
-
-```powershell
-irm https://raw.githubusercontent.com/open-horizon-labs/oh-omp/main/scripts/install.ps1 | iex
-```
-
-By default, the installer uses Bun when available (and compatible), otherwise installs the prebuilt binary.
-
-Options:
-
-- POSIX (`install.sh`): `--source`, `--binary`, `--ref <ref>`, `-r <ref>`
-- PowerShell (`install.ps1`): `-Source`, `-Binary`, `-Ref <ref>`
-- `--ref`/`-Ref` with binary mode must reference a release tag; branch/commit refs require source mode
-
-Set custom install directory with `PI_INSTALL_DIR`.
-
-Examples:
-
-```bash
-# Source install (Bun)
-curl -fsSL https://raw.githubusercontent.com/open-horizon-labs/oh-omp/main/scripts/install.sh | sh -s -- --source
-
-# Install release tag via binary
-curl -fsSL https://raw.githubusercontent.com/open-horizon-labs/oh-omp/main/scripts/install.sh | sh -s -- --binary --ref v3.20.1
-
-# Install branch/commit via source
-curl -fsSL https://raw.githubusercontent.com/open-horizon-labs/oh-omp/main/scripts/install.sh | sh -s -- --source --ref main
-```
-
-```powershell
-# Install release tag via binary
-& ([scriptblock]::Create((irm https://raw.githubusercontent.com/open-horizon-labs/oh-omp/main/scripts/install.ps1))) -Binary -Ref v3.20.1
-# Install branch/commit via source
-& ([scriptblock]::Create((irm https://raw.githubusercontent.com/open-horizon-labs/oh-omp/main/scripts/install.ps1))) -Source -Ref main
-```
-
-### Via [mise](https://mise.jdx.dev)
-
-```bash
-mise use -g github:open-horizon-labs/oh-omp
+# npm
+npm install -g @oh-labs/oh-omp
 ```
 
 ### Manual download
 
-Download binaries directly from [GitHub Releases](https://github.com/open-horizon-labs/oh-omp/releases/latest).
+Download binaries from [GitHub Releases](https://github.com/open-horizon-labs/oh-omp/releases/latest).
+
+Platforms: `darwin-arm64`, `linux-x64`.
 
 ---
 
