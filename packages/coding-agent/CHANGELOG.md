@@ -2,6 +2,13 @@
 
 ## [Unreleased]
 
+## [0.3.3] - 2026-03-12
+
+### Fixed
+
+- Budget double-counting: `currentTurnTokens` was set to the cost of all messages then subtracted as a fixed cost before bounding those same messages, halving the effective context window for conversation history
+- Subagent assignment persistence: task assignment entered as the first user message and was subject to budget-driven dropping, causing subagents to lose their purpose in long conversations. Moved assignment into the subagent system prompt where it persists as a fixed cost
+
 ## [0.3.2] - 2026-03-12
 
 ### Added
