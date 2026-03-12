@@ -2,10 +2,17 @@
 
 ## [Unreleased]
 
+## [0.3.2] - 2026-03-12
+
+### Added
+
+- `.oh/` discovery provider: project-local skills in `.oh/skills/` are now loaded automatically (priority 75, above `.agents/` at 70)
+
 ### Changed
 
 - Synced with upstream v13.11.0 (Parallel web search provider, `/copy` subcommands, eager todo, hashline fixes, multi-path search)
 - Updated installation instructions for fork package
+- Documented fork release procedure, upstream merge strategy, and removed-subsystem table in oh-ship skill
 
 ## [0.3.0] - 2026-03-10
 
