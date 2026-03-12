@@ -966,6 +966,7 @@ export async function runSubprocess(options: ExecutorOptions): Promise<SingleRes
 						worktree: worktree ?? "",
 						outputSchema: normalizedOutputSchema,
 						contextFile: options.contextFile,
+						task,
 					}),
 				sessionManager,
 				hasUI: false,
@@ -1078,7 +1079,7 @@ export async function runSubprocess(options: ExecutorOptions): Promise<SingleRes
 				}
 			});
 
-			await session.prompt(task);
+			await session.prompt("Begin.");
 			await session.waitForIdle();
 
 			const reminderToolChoice = buildNamedToolChoice("submit_result", session.model);

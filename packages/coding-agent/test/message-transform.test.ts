@@ -3,6 +3,7 @@ import type { AgentMessage } from "@oh-my-pi/pi-agent-core";
 import type { AssistantMessage, DeveloperMessage, ToolResultMessage, UserMessage } from "@oh-my-pi/pi-ai";
 import {
 	DEFAULT_HOT_WINDOW_TURNS,
+	deriveBudget,
 	formatStubText,
 	segmentIntoTurns,
 	TOOL_RESULT_STUB_TEXT,
@@ -1050,5 +1051,53 @@ describe("TurnDecision sourceTags", () => {
 		const toolTurn = metadata.decisions.find(d => d.hasToolResults)!;
 		// Two read tool results → deduplicated to single tag
 		expect(toolTurn.sourceTags).toEqual(["tool:read"]);
+	});
+});
+
+// ═══════════════════════════════════════════════════════════════════════════
+// deriveBudget
+// ═══════════════════════════════════════════════════════════════════════════
+
+describe("deriveBudget", () => {
+	const BASE_INPUT = {
+		contextWindow: 200_000,
+		systemPromptTokens: 15_000,
+		toolDefinitionTokens: 5_000,
+		currentTurnTokens: 0,
+		safetyMarginPercent: 5,
+		messageBudgetPercent: 50,
+		hydrationBudgetPercent: 50,
+	};
+
+	test("allocatable equals contextWindow minus fixed costs and safety reserve", () => {
+		const budget = deriveBudget(BASE_INPUT);
+		// safety = 200_000 * 0.05 = 10_000
+		// allocatable = 200_000 - 15_000 - 5_000 - 0 - 10_000 = 170_000
+		expect(budget.maxTokens).toBe(170_000);
+	});
+
+	test("message and hydration budgets split allocatable by configured percentages", () => {
+		const budget = deriveBudget(BASE_INPUT);
+		// 50/50 split of 170_000
+		expect(budget.messageBudgetMin).toBe(85_000);
+		expect(budget.hydrationBudgetMax).toBe(85_000);
+	});
+
+	test("currentTurnTokens reduces allocatable when non-zero", () => {
+		const budget = deriveBudget({ ...BASE_INPUT, currentTurnTokens: 30_000 });
+		// allocatable = 200_000 - 15_000 - 5_000 - 30_000 - 10_000 = 140_000
+		expect(budget.maxTokens).toBe(140_000);
+	});
+
+	test("allocatable floors at zero when costs exceed context window", () => {
+		const budget = deriveBudget({
+			...BASE_INPUT,
+			contextWindow: 20_000,
+			systemPromptTokens: 15_000,
+			toolDefinitionTokens: 10_000,
+		});
+		expect(budget.maxTokens).toBe(0);
+		expect(budget.messageBudgetMin).toBe(0);
+		expect(budget.hydrationBudgetMax).toBe(0);
 	});
 });

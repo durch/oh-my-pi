@@ -1433,7 +1433,7 @@ export async function createAgentSession(options: CreateAgentSessionOptions = {}
 						contextWindow: currentModel.contextWindow,
 						systemPromptTokens: Math.ceil(currentSystemPrompt.length / 4),
 						toolDefinitionTokens: estimateToolDefinitionTokens(currentTools),
-						currentTurnTokens: estimateMessageTokens(transformedMessages),
+						currentTurnTokens: 0,
 						safetyMarginPercent: assemblerSettings.safetyMarginPercent,
 						messageBudgetPercent: assemblerSettings.messageBudgetPercent,
 						hydrationBudgetPercent: assemblerSettings.hydrationBudgetPercent,

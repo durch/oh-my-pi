@@ -6,7 +6,7 @@
  * Input for deriving the assembler budget from model context window.
  *
  * Budget decomposition:
- *   available = contextWindow - systemPromptTokens - toolDefinitionTokens - currentTurnTokens
+ *   available = contextWindow - systemPromptTokens - toolDefinitionTokens - currentTurnTokens - safetyReserve
  *
  * Fixed costs (measured per turn via chars/4 heuristic):
  *   - System prompt          (~5-15K tokens)
@@ -27,7 +27,12 @@ export interface BudgetDerivationInput {
 	systemPromptTokens: number;
 	/** Estimated tokens consumed by tool definitions (JSON schema). */
 	toolDefinitionTokens: number;
-	/** Estimated tokens consumed by current-turn messages. */
+	/**
+	 * Reserved token overhead for current-turn content not managed by the message
+	 * transform (e.g., injected fragments). The message array — including the current
+	 * turn — is bounded separately by transformMessages. Pass 0 unless reserving
+	 * space for content injected outside the message array.
+	 */
 	currentTurnTokens: number;
 	/** Percentage of context window held as safety reserve (0-100, default: 5). */
 	safetyMarginPercent?: number;

@@ -33,3 +33,9 @@ Giving up is a last resort. If truly blocked, you **MUST** call `submit_result` 
 You **MUST NOT** give up due to uncertainty, missing information obtainable via tools or repo context, or needing a design decision you can derive yourself.
 
 You **MUST** keep going until this ticket is closed. This matters.
+
+{{#if task}}
+{{SECTION_SEPERATOR "Assignment"}}
+
+{{{task}}}
+{{/if}}
