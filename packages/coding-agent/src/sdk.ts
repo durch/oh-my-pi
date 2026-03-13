@@ -100,6 +100,7 @@ import {
 	loadProjectContextFiles as loadContextFilesInternal,
 } from "./system-prompt";
 import { AgentOutputManager } from "./task/output-manager";
+import { TaskStore } from "./tasks/store";
 import { resolveThinkingLevelForModel, toReasoningEffort } from "./thinking";
 import {
 	BashTool,
@@ -856,6 +857,19 @@ export async function createAgentSession(options: CreateAgentSessionOptions = {}
 		memexLicense = undefined;
 	}
 
+	// Initialize task store for persistent LLM-native task tracking.
+	let taskStore: TaskStore | undefined;
+	try {
+		taskStore = await TaskStore.open(agentDir, cwd);
+		postmortem.register("task-store-close", () => taskStore!.close());
+		logger.debug("TaskStore initialized");
+	} catch (err) {
+		logger.debug("TaskStore not available", {
+			error: err instanceof Error ? err.message : String(err),
+		});
+		taskStore = undefined;
+	}
+
 	const toolSession: ToolSession = {
 		cwd,
 		hasUI: options.hasUI ?? false,
@@ -900,6 +914,7 @@ export async function createAgentSession(options: CreateAgentSessionOptions = {}
 		asyncJobManager,
 		pendingActionStore,
 		recallStore,
+		taskStore,
 		memexLicense,
 	};
 

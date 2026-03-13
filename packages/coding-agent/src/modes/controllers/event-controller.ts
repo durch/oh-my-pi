@@ -387,18 +387,24 @@ export class EventController {
 						this.ctx.ui.requestRender();
 					}
 				}
-				// Update todo display when todo_write tool completes
+				// Update todo display when todo/todo_write tool completes.
 				if (event.toolName === "todo_write" && !event.isError) {
 					const details = event.result.details as { phases?: TodoPhase[] } | undefined;
 					if (details?.phases) {
 						this.ctx.setTodos(details.phases);
 					}
-				} else if (event.toolName === "todo_write" && event.isError) {
+				} else if (event.toolName === "todo" && !event.isError) {
+					// New tool syncs phases via session.setTodoPhases() — read them back.
+					const phases = this.ctx.session.getTodoPhases?.();
+					if (phases?.length) {
+						this.ctx.setTodos(phases);
+					}
+				} else if ((event.toolName === "todo_write" || event.toolName === "todo") && event.isError) {
 					const textContent = event.result.content.find(
 						(content: { type: string; text?: string }) => content.type === "text",
 					)?.text;
 					this.ctx.showWarning(
-						`Todo update failed${textContent ? `: ${textContent}` : ". Progress may be stale until todo_write succeeds."}`,
+						`Todo update failed${textContent ? `: ${textContent}` : ". Progress may be stale until next update."}`,
 					);
 				}
 				if (event.toolName === "exit_plan_mode" && !event.isError) {

@@ -13,6 +13,7 @@ import { EditTool } from "../patch";
 import type { PlanModeState } from "../plan-mode/state";
 import { TaskTool } from "../task";
 import type { AgentOutputManager } from "../task/output-manager";
+import type { TaskStore } from "../tasks/store";
 import type { EventBus } from "../utils/event-bus";
 import { SearchTool } from "../web/search";
 import { AskTool } from "./ask";
@@ -39,7 +40,10 @@ import { ResolveTool } from "./resolve";
 import { reportFindingTool } from "./review";
 import { loadSshTool } from "./ssh";
 import { SubmitResultTool } from "./submit-result";
-import { type TodoPhase, TodoWriteTool } from "./todo-write";
+import { createTodoTool } from "./todo";
+import type { TodoPhase } from "./todo-write";
+import { TodoWriteTool } from "./todo-write";
+import { createTodosReadTool } from "./todos";
 import { WriteTool } from "./write";
 
 // Exa MCP tools (22 tools)
@@ -76,7 +80,9 @@ export * from "./resolve";
 export * from "./review";
 export * from "./ssh";
 export * from "./submit-result";
+export * from "./todo";
 export * from "./todo-write";
+export * from "./todos";
 export * from "./write";
 
 /** Tool type (AgentTool from pi-ai) */
@@ -158,6 +164,8 @@ export interface ToolSession {
 	setCheckpointState?: (state: CheckpointState | null) => void;
 	/** RecallStore for session history vector search (available when recall infrastructure is initialized). */
 	recallStore?: RecallStore;
+	/** TaskStore for persistent LLM-native task tracking. */
+	taskStore?: TaskStore;
 	/** Memex license key for embedding queries (available when recall infrastructure is initialized). */
 	memexLicense?: string;
 }
@@ -187,6 +195,8 @@ export const BUILTIN_TOOLS: Record<string, ToolFactory> = {
 	cancel_job: CancelJobTool.createIf,
 	await: AwaitTool.createIf,
 	todo_write: s => new TodoWriteTool(s),
+	todo: createTodoTool,
+	todos: createTodosReadTool,
 	fetch: s => new FetchTool(s),
 	web_search: s => new SearchTool(s),
 	write: s => new WriteTool(s),
